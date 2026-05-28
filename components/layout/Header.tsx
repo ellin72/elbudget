@@ -126,7 +126,7 @@ export default function Header() {
                   Settings
                 </Link>
                 <Link
-                  href="/settings/profile"
+                  href="/settings"
                   onClick={() => setUserMenuOpen(false)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-accent transition-colors"
                 >

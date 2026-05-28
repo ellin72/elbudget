@@ -7,7 +7,7 @@ export const loginSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
-export const registerSchema = z.object({
+const registerBaseSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(50),
   email: z.string().email("Invalid email address"),
   password: z
@@ -16,10 +16,14 @@ export const registerSchema = z.object({
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[0-9]/, "Password must contain at least one number"),
   confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
 });
+
+export const registerSchema = registerBaseSchema.refine(
+  (data) => data.password === data.confirmPassword,
+  { message: "Passwords do not match", path: ["confirmPassword"] }
+);
+
+export const registerServerSchema = registerBaseSchema.omit({ confirmPassword: true });
 
 export const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -42,7 +46,10 @@ export const resetPasswordSchema = z.object({
 
 export const onboardingSchema = z.object({
   monthlyIncome: z.coerce.number().min(0, "Income must be positive"),
-  salaryDate: z.coerce.number().min(1).max(31).optional(),
+  salaryDate: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.coerce.number().min(1).max(31).optional()
+  ),
   budgetStyle: z.enum(["RULE_50_30_20", "ZERO_BASED", "ENVELOPE", "CUSTOM"]),
   currency: z.enum(["NAD", "USD", "ZAR", "EUR", "GBP", "AUD", "CAD"]),
 });

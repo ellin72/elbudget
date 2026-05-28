@@ -1,0 +1,23 @@
+{
+  "name": "Elbudget – AI-Powered Personal Finance",
+  "short_name": "Elbudget",
+  "description": "Take control of your money with Elbudget — the AI-powered budgeting app.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

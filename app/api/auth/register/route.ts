@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { registerSchema } from "@/lib/validations";
+import { registerServerSchema } from "@/lib/validations";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const parsed = registerSchema.safeParse(body);
+  const parsed = registerServerSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid data", issues: parsed.error.issues }, { status: 400 });
   }
