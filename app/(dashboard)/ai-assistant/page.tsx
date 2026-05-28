@@ -87,7 +87,16 @@ export default function AIAssistantPage() {
                 {suggestions.map((s) => (
                   <button
                     key={s}
-                    onClick={() => { setInput(s); }}
+                    onClick={() => {
+                      const userMsg: Message = {
+                        id: Date.now().toString(),
+                        role: "USER",
+                        content: s,
+                        createdAt: new Date().toISOString(),
+                      };
+                      setMessages((prev) => [...prev, userMsg]);
+                      mutation.mutate(s);
+                    }}
                     className="px-4 py-3 rounded-xl border border-border text-sm hover:bg-accent text-left transition-colors"
                   >
                     {s}
@@ -142,6 +151,7 @@ export default function AIAssistantPage() {
             <button
               onClick={handleSend}
               disabled={!input.trim() || mutation.isPending}
+              aria-label="Send message"
               className="px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shadow-glow"
             >
               <Send className="w-4 h-4" />

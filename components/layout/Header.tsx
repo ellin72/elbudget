@@ -2,8 +2,8 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
-import { usePathname } from "next/navigation";
-import { Bell, LogOut, Menu, Moon, Plus, Search, Settings, Sun, User } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Bell, LogOut, Menu, Moon, Plus, Search, Settings, Sun, User, X } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
@@ -22,13 +22,29 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
+const QUICK_LINKS = [
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Transactions", href: "/transactions" },
+  { label: "Budgets", href: "/budgets" },
+  { label: "Goals", href: "/goals" },
+  { label: "Debts", href: "/debts" },
+  { label: "Recurring Items", href: "/recurring" },
+  { label: "AI Assistant", href: "/ai-assistant" },
+  { label: "Reports", href: "/reports" },
+  { label: "Settings", href: "/settings" },
+];
+
 export default function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const { setSidebarOpen, setTransactionModalOpen, notificationsOpen, setNotificationsOpen, unreadCount } = useUIStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const pageTitle = Object.entries(PAGE_TITLES).find(([key]) =>
     pathname === key || pathname.startsWith(key + "/")
@@ -45,12 +61,35 @@ export default function Header() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    if (searchOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    } else {
+      setSearchQuery("");
+    }
+  }, [searchOpen]);
+
+  // Close search on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSearchOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const filteredLinks = searchQuery.trim()
+    ? QUICK_LINKS.filter((l) => l.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    : QUICK_LINKS;
+
   return (
+    <>
     <header className="h-16 border-b border-border bg-background/80 backdrop-blur-md flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
       <div className="flex items-center gap-4">
         {/* Mobile hamburger */}
         <button
           onClick={() => setSidebarOpen(true)}
+          aria-label="Open sidebar"
           className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-accent transition-colors lg:hidden"
         >
           <Menu className="w-5 h-5" />
@@ -60,13 +99,18 @@ export default function Header() {
 
       <div className="flex items-center gap-2">
         {/* Search — hidden on mobile for brevity */}
-        <button className="hidden sm:flex w-9 h-9 rounded-xl items-center justify-center hover:bg-accent transition-colors text-muted-foreground">
+        <button
+          onClick={() => setSearchOpen(true)}
+          aria-label="Search pages"
+          className="hidden sm:flex w-9 h-9 rounded-xl items-center justify-center hover:bg-accent transition-colors text-muted-foreground"
+        >
           <Search className="w-4 h-4" />
         </button>
 
         {/* Quick add transaction */}
         <button
           onClick={() => setTransactionModalOpen(true)}
+          aria-label="Add transaction"
           className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-glow"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -146,5 +190,45 @@ export default function Header() {
         </div>
       </div>
     </header>
+
+    {/* Search Modal */}
+    {searchOpen && (
+      <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4">
+        <div className="absolute inset-0 bg-black/50" onClick={() => setSearchOpen(false)} />
+        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-md z-10 overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+            <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search pages…"
+              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
+            />
+            <button onClick={() => setSearchOpen(false)} aria-label="Close search" className="text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="p-2 max-h-72 overflow-y-auto">
+            {filteredLinks.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No results found</p>
+            ) : (
+              filteredLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setSearchOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-accent transition-colors"
+                >
+                  <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                  {link.label}
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
