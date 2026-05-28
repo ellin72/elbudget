@@ -1,0 +1,150 @@
+"use client";
+
+import { signOut, useSession } from "next-auth/react";
+import { useTheme } from "next-themes";
+import { usePathname } from "next/navigation";
+import { Bell, LogOut, Menu, Moon, Plus, Search, Settings, Sun, User } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { useUIStore } from "@/store/useUIStore";
+import { cn } from "@/lib/utils";
+import Link from "next/link";
+
+const PAGE_TITLES: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/transactions": "Transactions",
+  "/budgets": "Budgets",
+  "/goals": "Goals",
+  "/debts": "Debts",
+  "/recurring": "Recurring Items",
+  "/ai-assistant": "AI Assistant",
+  "/reports": "Reports",
+  "/analytics": "Analytics",
+  "/settings": "Settings",
+};
+
+export default function Header() {
+  const pathname = usePathname();
+  const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
+  const { setSidebarOpen, setTransactionModalOpen, notificationsOpen, setNotificationsOpen, unreadCount } = useUIStore();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const pageTitle = Object.entries(PAGE_TITLES).find(([key]) =>
+    pathname === key || pathname.startsWith(key + "/")
+  )?.[1] ?? "Elbudget";
+
+  // Close on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <header className="h-16 border-b border-border bg-background/80 backdrop-blur-md flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
+      <div className="flex items-center gap-4">
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-accent transition-colors lg:hidden"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <h1 className="font-semibold text-lg">{pageTitle}</h1>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {/* Search — hidden on mobile for brevity */}
+        <button className="hidden sm:flex w-9 h-9 rounded-xl items-center justify-center hover:bg-accent transition-colors text-muted-foreground">
+          <Search className="w-4 h-4" />
+        </button>
+
+        {/* Quick add transaction */}
+        <button
+          onClick={() => setTransactionModalOpen(true)}
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-glow"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add
+        </button>
+
+        {/* Theme toggle */}
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground"
+        >
+          <Sun className="w-4 h-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute w-4 h-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </button>
+
+        {/* Notifications */}
+        <button
+          onClick={() => setNotificationsOpen(!notificationsOpen)}
+          className="relative w-9 h-9 rounded-xl flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground"
+        >
+          <Bell className="w-4 h-4" />
+          {unreadCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </button>
+
+        {/* User menu */}
+        <div className="relative" ref={userMenuRef}>
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-xl hover:bg-accent transition-colors"
+          >
+            <div className="w-7 h-7 rounded-full bg-brand-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+            </div>
+            <span className="text-sm font-medium hidden sm:block max-w-[120px] truncate">
+              {session?.user?.name ?? "User"}
+            </span>
+          </button>
+
+          {userMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl border border-border bg-card shadow-card z-50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-border">
+                <p className="text-sm font-semibold truncate">{session?.user?.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{session?.user?.email}</p>
+              </div>
+              <div className="p-1.5 space-y-0.5">
+                <Link
+                  href="/settings"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-accent transition-colors"
+                >
+                  <Settings className="w-4 h-4 text-muted-foreground" />
+                  Settings
+                </Link>
+                <Link
+                  href="/settings/profile"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-accent transition-colors"
+                >
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  Profile
+                </Link>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-destructive/10 hover:text-destructive transition-colors text-left"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}

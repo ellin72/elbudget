@@ -1,0 +1,149 @@
+"use client";
+
+import { useSession } from "next-auth/react";
+import { useUIStore } from "@/store/useUIStore";
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Loader2, User, Bell, CreditCard, Shield } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { userProfileSchema, type UserProfileInput } from "@/lib/validations";
+
+const CURRENCY_OPTIONS = [
+  { value: "NAD", label: "NAD (N$) – Namibian Dollar" },
+  { value: "USD", label: "USD ($) – US Dollar" },
+  { value: "ZAR", label: "ZAR (R) – South African Rand" },
+  { value: "EUR", label: "EUR (€) – Euro" },
+  { value: "GBP", label: "GBP (£) – British Pound" },
+];
+
+export default function SettingsPage() {
+  const { data: session } = useSession();
+  const { currency, setCurrency } = useUIStore();
+  const [tab, setTab] = useState<"profile" | "notifications" | "subscription">("profile");
+
+  const { register, handleSubmit, formState: { errors } } = useForm<UserProfileInput>({
+    resolver: zodResolver(userProfileSchema),
+    defaultValues: {
+      name: session?.user?.name ?? "",
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (data: UserProfileInput) => {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed");
+    },
+    onSuccess: () => toast.success("Profile updated!"),
+    onError: () => toast.error("Failed to update profile"),
+  });
+
+  const tabs = [
+    { id: "profile", label: "Profile", icon: User },
+    { id: "notifications", label: "Notifications", icon: Bell },
+    { id: "subscription", label: "Subscription", icon: CreditCard },
+  ] as const;
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h2 className="text-xl font-semibold">Settings</h2>
+        <p className="text-sm text-muted-foreground">Manage your account and preferences</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-muted rounded-xl p-1">
+        {tabs.map(({ id, label, icon: Icon }) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`flex items-center gap-2 flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${tab === id ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            <Icon className="w-4 h-4" />{label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "profile" && (
+        <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
+          <h3 className="font-semibold">Personal Information</h3>
+          <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
+            {[
+              { name: "name", label: "Full Name", placeholder: "Your name" },
+              { name: "email", label: "Email", placeholder: "you@example.com", type: "email" },
+            ].map(({ name, label, placeholder, type }) => (
+              <div key={name} className="space-y-1.5">
+                <label className="text-sm font-medium">{label}</label>
+                <input {...register(name as any)} type={type ?? "text"} placeholder={placeholder}
+                  className="w-full px-4 py-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+            ))}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Currency</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value as any)}
+                className="w-full px-4 py-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                {CURRENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
+            <button type="submit" disabled={mutation.isPending}
+              className="px-6 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 flex items-center gap-2 disabled:opacity-50">
+              {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save Changes
+            </button>
+          </form>
+        </div>
+      )}
+
+      {tab === "notifications" && (
+        <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
+          <h3 className="font-semibold">Notification Preferences</h3>
+          <div className="space-y-4">
+            {[
+              { label: "Budget alerts", description: "Get notified when you're close to your budget limit" },
+              { label: "AI insights", description: "Receive weekly AI-powered financial tips" },
+              { label: "Goal milestones", description: "Celebrate when you reach goal milestones" },
+              { label: "Bill reminders", description: "Reminders for upcoming recurring payments" },
+            ].map(({ label, description }) => (
+              <div key={label} className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">{label}</p>
+                  <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer mt-0.5">
+                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <div className="w-10 h-6 bg-muted peer-checked:bg-primary rounded-full peer-focus:ring-2 peer-focus:ring-ring transition-all after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:w-5 after:h-5 after:transition-all peer-checked:after:translate-x-4" />
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "subscription" && (
+        <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
+          <h3 className="font-semibold">Your Plan</h3>
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-primary">Free Plan</p>
+              <p className="text-sm text-muted-foreground">N$0 / month</p>
+            </div>
+            <Shield className="w-8 h-8 text-primary/40" />
+          </div>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            {["Up to 100 transactions/month", "Basic AI insights (3/month)", "2 savings goals", "Basic reports"].map((f) => (
+              <p key={f} className="flex items-center gap-2">✓ {f}</p>
+            ))}
+          </div>
+          <button className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-500 to-brand-700 text-white font-semibold text-sm hover:opacity-90 transition-opacity shadow-glow">
+            Upgrade to Premium — N$149/month
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

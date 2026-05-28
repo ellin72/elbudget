@@ -1,0 +1,77 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { transactionSchema, transactionFilterSchema } from "@/lib/validations";
+
+export async function GET(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const filters = transactionFilterSchema.safeParse(Object.fromEntries(searchParams));
+
+  const page = Number(searchParams.get("page") ?? "1");
+  const pageSize = Number(searchParams.get("pageSize") ?? "20");
+  const skip = (page - 1) * pageSize;
+
+  const where: any = { userId: session.user.id };
+  if (filters.success) {
+    if (filters.data.type) where.type = filters.data.type;
+    if (filters.data.categoryId) where.categoryId = filters.data.categoryId;
+    if (filters.data.search) {
+      where.description = { contains: filters.data.search };
+    }
+    if (filters.data.startDate) where.date = { ...where.date, gte: new Date(filters.data.startDate) };
+    if (filters.data.endDate) where.date = { ...where.date, lte: new Date(filters.data.endDate) };
+  }
+
+  const [transactions, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: { category: true },
+      orderBy: { date: "desc" },
+      skip,
+      take: pageSize,
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  return NextResponse.json({
+    data: transactions.map((t) => ({
+      ...t,
+      amount: t.amount.toNumber(),
+      date: t.date.toISOString(),
+      tags: JSON.parse(t.tags ?? "[]"),
+    })),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  });
+}
+
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const parsed = transactionSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid data", issues: parsed.error.issues }, { status: 400 });
+  }
+
+  const tx = await prisma.transaction.create({
+    data: {
+      ...parsed.data,
+      userId: session.user.id,
+      date: new Date(parsed.data.date),
+      tags: JSON.stringify(parsed.data.tags ?? []),
+    },
+    include: { category: true },
+  });
+
+  return NextResponse.json(
+    { data: { ...tx, amount: tx.amount.toNumber(), tags: JSON.parse(tx.tags ?? "[]") } },
+    { status: 201 }
+  );
+}
