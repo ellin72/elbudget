@@ -46,6 +46,34 @@ function getNextDueLabel(date: string): string {
   return `In ${diff} days`;
 }
 
+function hasPaidCurrentCycle(lastPaid: string | null | undefined, frequency: string): boolean {
+  if (!lastPaid) return false;
+
+  const paidDate = new Date(lastPaid);
+  const now = new Date();
+  const diffMs = now.getTime() - paidDate.getTime();
+
+  switch (frequency) {
+    case "DAILY":
+      return paidDate.toDateString() === now.toDateString();
+    case "WEEKLY":
+      return diffMs >= 0 && diffMs < 7 * 24 * 60 * 60 * 1000;
+    case "BIWEEKLY":
+      return diffMs >= 0 && diffMs < 14 * 24 * 60 * 60 * 1000;
+    case "MONTHLY":
+      return paidDate.getFullYear() === now.getFullYear() && paidDate.getMonth() === now.getMonth();
+    case "QUARTERLY":
+      return (
+        paidDate.getFullYear() === now.getFullYear() &&
+        Math.floor(paidDate.getMonth() / 3) === Math.floor(now.getMonth() / 3)
+      );
+    case "YEARLY":
+      return paidDate.getFullYear() === now.getFullYear();
+    default:
+      return false;
+  }
+}
+
 export default function RecurringPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -374,6 +402,7 @@ function RecurringItemCard({
 }) {
   const dueLabel = getNextDueLabel(item.nextDueDate);
   const isOverdue = dueLabel === "Overdue";
+  const canMarkPaid = item.isActive && !hasPaidCurrentCycle(item.lastPaid, item.frequency);
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-xl p-4 border flex items-center gap-4 transition-all ${
@@ -422,15 +451,16 @@ function RecurringItemCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button
-          onClick={() => onMarkPaid(item.id)}
-          title={item.isActive ? "Mark as paid" : "Resume item to mark as paid"}
-          disabled={!item.isActive}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-        >
-          <CheckCircleIcon className="w-3.5 h-3.5" />
-          <span>Mark Paid</span>
-        </button>
+        {canMarkPaid && (
+          <button
+            onClick={() => onMarkPaid(item.id)}
+            title="Mark as paid"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+          >
+            <CheckCircleIcon className="w-3.5 h-3.5" />
+            <span>Mark Paid</span>
+          </button>
+        )}
         <button
           onClick={() => onToggle(item.id, !item.isActive)}
           title={item.isActive ? "Stop recurring item" : "Resume recurring item"}

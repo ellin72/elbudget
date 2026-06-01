@@ -3,6 +3,37 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+function hasPaidCurrentCycle(lastPaid: Date | null, referenceDate: Date, frequency: string) {
+  if (!lastPaid) return false;
+
+  switch (frequency) {
+    case "DAILY":
+      return lastPaid.toDateString() === referenceDate.toDateString();
+    case "WEEKLY": {
+      const diffMs = referenceDate.getTime() - lastPaid.getTime();
+      return diffMs >= 0 && diffMs < 7 * 24 * 60 * 60 * 1000;
+    }
+    case "BIWEEKLY": {
+      const diffMs = referenceDate.getTime() - lastPaid.getTime();
+      return diffMs >= 0 && diffMs < 14 * 24 * 60 * 60 * 1000;
+    }
+    case "MONTHLY":
+      return (
+        lastPaid.getFullYear() === referenceDate.getFullYear() &&
+        lastPaid.getMonth() === referenceDate.getMonth()
+      );
+    case "QUARTERLY":
+      return (
+        lastPaid.getFullYear() === referenceDate.getFullYear() &&
+        Math.floor(lastPaid.getMonth() / 3) === Math.floor(referenceDate.getMonth() / 3)
+      );
+    case "YEARLY":
+      return lastPaid.getFullYear() === referenceDate.getFullYear();
+    default:
+      return false;
+  }
+}
+
 function addByFrequency(date: Date, frequency: string) {
   const d = new Date(date);
   switch (frequency) {
@@ -74,6 +105,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const paidAt = new Date();
+    if (hasPaidCurrentCycle(item.lastPaid, paidAt, item.frequency)) {
+      return NextResponse.json(
+        { error: "This recurring item has already been paid for the current cycle." },
+        { status: 400 }
+      );
+    }
+
     let nextDueDate = addByFrequency(item.nextDueDate, item.frequency);
     let safety = 0;
     while (nextDueDate <= paidAt && safety < 36) {
