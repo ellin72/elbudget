@@ -79,6 +79,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast.success("Profile updated!");
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
       queryClient.invalidateQueries({ queryKey: ["user-profile"] });
     },
     onError: () => toast.error("Failed to update profile"),

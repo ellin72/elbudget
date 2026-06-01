@@ -58,6 +58,15 @@ const PERIODS = [
   { label: "12 Months", value: "12" },
 ];
 
+const DOT_COLOR_CLASSES = [
+  "bg-emerald-500",
+  "bg-sky-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-violet-500",
+  "bg-cyan-500",
+];
+
 export default function AnalyticsPage() {
   const { currency } = useUIStore();
   const [months, setMonths] = useState("6");
@@ -363,13 +372,7 @@ export default function AnalyticsPage() {
                     className="flex items-center justify-between text-sm"
                   >
                     <div className="flex items-center gap-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{
-                          background:
-                            cat.color || CHART_COLORS[i % CHART_COLORS.length],
-                        }}
-                      />
+                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT_COLOR_CLASSES[i % DOT_COLOR_CLASSES.length]}`} />
                       <span className="text-muted-foreground truncate max-w-[120px]">
                         {cat.name}
                       </span>

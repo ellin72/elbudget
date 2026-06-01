@@ -63,6 +63,7 @@ export default function TransactionForm({ transaction, onClose }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
       toast.success(transaction ? "Transaction updated!" : "Transaction added!");
       onClose();
     },
@@ -77,7 +78,7 @@ export default function TransactionForm({ transaction, onClose }: Props) {
           <h2 className="text-lg font-semibold">
             {transaction ? "Edit Transaction" : "New Transaction"}
           </h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-accent">
+          <button title="Close form" aria-label="Close form" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-accent">
             <X className="w-4 h-4" />
           </button>
         </div>

@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { goalSchema } from "@/lib/validations";
 import { endOfMonth, format, startOfMonth } from "date-fns";
+import {
+  calculateCurrentPeriodStats,
+  type FinancialTransaction,
+} from "@/lib/financial";
 
 export async function GET() {
   const session = await auth();
@@ -51,15 +55,22 @@ export async function GET() {
     }),
   ]);
 
-  const monthlyTransactionIncome = monthTransactions
-    .filter((t) => t.type === "INCOME")
-    .reduce((sum, t) => sum + t.amount.toNumber(), 0);
-  const monthlyExpenses = monthTransactions
-    .filter((t) => t.type === "EXPENSE")
-    .reduce((sum, t) => sum + t.amount.toNumber(), 0);
   const declaredMonthlyIncome = user?.monthlyIncome?.toNumber?.() ?? 0;
-  const monthlyIncome = declaredMonthlyIncome > 0 ? declaredMonthlyIncome : monthlyTransactionIncome;
-  const monthlySavings = monthlyIncome - monthlyExpenses;
+  const normalizedTransactions: FinancialTransaction[] = monthTransactions.map((transaction) => ({
+    amount: transaction.amount.toNumber(),
+    type: transaction.type,
+    date: transaction.date,
+    categoryId: transaction.categoryId,
+    category: transaction.category,
+  }));
+  const currentPeriod = calculateCurrentPeriodStats(
+    normalizedTransactions,
+    now,
+    declaredMonthlyIncome
+  );
+  const monthlyIncome = currentPeriod.income;
+  const monthlyExpenses = currentPeriod.expenses;
+  const monthlySavings = currentPeriod.savings;
 
   const unbudgetedExpenses = monthTransactions.filter((tx) => {
     if (tx.type !== "EXPENSE") return false;

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
+import {
+  buildMonthlySummary,
+  buildSpendingByCategory,
+  createMonthBuckets,
+  type FinancialTransaction,
+} from "@/lib/financial";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -10,85 +15,57 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const monthsBack = parseInt(searchParams.get("months") ?? "6");
+  const monthsBack = Math.min(12, Math.max(1, parseInt(searchParams.get("months") ?? "6", 10) || 6));
   const userId = session.user.id;
 
   const now = new Date();
-  const months = Array.from({ length: monthsBack }, (_, i) => {
-    const date = subMonths(now, i);
-    return {
-      label: format(date, "MMM yyyy"),
-      start: startOfMonth(date),
-      end: endOfMonth(date),
-    };
-  }).reverse();
-
-  // Fetch all transactions for date range
-  const [transactions, categories] = await Promise.all([
-    prisma.transaction.findMany({
-      where: {
-        userId,
-        date: {
-          gte: months[0].start,
-          lte: months[months.length - 1].end,
-        },
-        type: { in: ["INCOME", "EXPENSE"] },
-      },
-      include: { category: true },
+  const [user, latestTx] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { monthlyIncome: true },
+    }),
+    prisma.transaction.findFirst({
+      where: { userId },
+      select: { date: true },
       orderBy: { date: "desc" },
     }),
-    prisma.category.findMany({
-      where: { OR: [{ userId }, { isDefault: true }] },
-    }),
   ]);
+  const anchorDate = latestTx?.date ?? now;
+  const months = createMonthBuckets(anchorDate, monthsBack);
 
-  // Monthly summary
-  const monthlySummary = months.map((m) => {
-    const monthTx = transactions.filter(
-      (t) => t.date >= m.start && t.date <= m.end
-    );
-    const income = monthTx
-      .filter((t) => t.type === "INCOME")
-      .reduce((s, t) => s + Number(t.amount), 0);
-    const expenses = monthTx
-      .filter((t) => t.type === "EXPENSE")
-      .reduce((s, t) => s + Number(t.amount), 0);
-    return {
-      month: m.label,
-      income,
-      expenses,
-      savings: income - expenses,
-      savingsRate: income > 0 ? ((income - expenses) / income) * 100 : 0,
-      transactionCount: monthTx.length,
-    };
+  // Fetch all transactions for date range
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      userId,
+      date: {
+        gte: months[0].start,
+        lte: months[months.length - 1].end,
+      },
+      type: { in: ["INCOME", "EXPENSE"] },
+    },
+    include: { category: true },
+    orderBy: { date: "desc" },
   });
 
-  // Spending by category (all time in range)
-  const categoryMap: Record<string, { name: string; color: string; total: number; count: number }> = {};
-  for (const tx of transactions.filter((t) => t.type === "EXPENSE")) {
-    const key = tx.categoryId ?? "uncategorized";
-    if (!categoryMap[key]) {
-      categoryMap[key] = {
-        name: tx.category?.name ?? "Uncategorized",
-        color: tx.category?.color ?? "#6B7280",
-        total: 0,
-        count: 0,
-      };
-    }
-    categoryMap[key].total += Number(tx.amount);
-    categoryMap[key].count++;
-  }
-  const spendingByCategory = Object.entries(categoryMap)
-    .map(([id, data]) => ({ id, ...data }))
-    .sort((a, b) => b.total - a.total);
+  const declaredMonthlyIncome = user?.monthlyIncome?.toNumber?.() ?? 0;
+  const normalizedTransactions: FinancialTransaction[] = transactions.map((transaction) => ({
+    amount: transaction.amount.toNumber(),
+    type: transaction.type,
+    date: transaction.date,
+    categoryId: transaction.categoryId,
+    category: transaction.category,
+  }));
+  const monthlySummary = buildMonthlySummary(
+    normalizedTransactions,
+    months,
+    declaredMonthlyIncome,
+    anchorDate
+  );
+  const spendingByCategory = buildSpendingByCategory(normalizedTransactions);
 
   // Totals
-  const totalIncome = transactions
-    .filter((t) => t.type === "INCOME")
-    .reduce((s, t) => s + Number(t.amount), 0);
-  const totalExpenses = transactions
-    .filter((t) => t.type === "EXPENSE")
-    .reduce((s, t) => s + Number(t.amount), 0);
+  const totalIncome = monthlySummary.reduce((sum, month) => sum + month.income, 0);
+  const totalExpenses = monthlySummary.reduce((sum, month) => sum + month.expenses, 0);
 
   return NextResponse.json({
     monthlySummary,

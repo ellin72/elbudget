@@ -178,6 +178,7 @@ export default function RecurringPage() {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
       toast.success("Payment recorded and added to transactions");
     },
     onError: (err: Error) => toast.error(err.message),

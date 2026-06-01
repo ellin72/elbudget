@@ -18,6 +18,7 @@ import {
   Line,
 } from "recharts";
 import { formatCurrency, CHART_COLORS } from "@/lib/utils";
+import { useUIStore } from "@/store/useUIStore";
 import { DownloadIcon, TrendingUpIcon, TrendingDownIcon, DollarSignIcon, BarChart2Icon } from "lucide-react";
 
 interface ReportData {
@@ -43,7 +44,21 @@ const PERIODS = [
   { label: "12 Months", value: "12" },
 ];
 
+const REPORT_COLOR_CLASSES = [
+  "bg-emerald-500",
+  "bg-rose-500",
+  "bg-blue-500",
+  "bg-violet-500",
+  "bg-amber-500",
+  "bg-cyan-500",
+  "bg-fuchsia-500",
+  "bg-lime-500",
+  "bg-orange-500",
+  "bg-slate-500",
+];
+
 export default function ReportsPage() {
+  const { currency } = useUIStore();
   const [months, setMonths] = useState("6");
 
   const { data, isLoading } = useQuery<ReportData>({
@@ -133,19 +148,19 @@ export default function ReportsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard
           label="Total Income"
-          value={formatCurrency(data?.totalIncome ?? 0)}
+          value={formatCurrency(data?.totalIncome ?? 0, currency as any)}
           icon={<TrendingUpIcon className="w-5 h-5 text-green-600" />}
           color="green"
         />
         <SummaryCard
           label="Total Expenses"
-          value={formatCurrency(data?.totalExpenses ?? 0)}
+          value={formatCurrency(data?.totalExpenses ?? 0, currency as any)}
           icon={<TrendingDownIcon className="w-5 h-5 text-red-500" />}
           color="red"
         />
         <SummaryCard
           label="Net Savings"
-          value={formatCurrency(data?.totalSavings ?? 0)}
+          value={formatCurrency(data?.totalSavings ?? 0, currency as any)}
           icon={<DollarSignIcon className="w-5 h-5 text-brand-600" />}
           color="blue"
         />
@@ -168,8 +183,8 @@ export default function ReportsPage() {
             <BarChart data={data?.monthlySummary} barSize={20}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => formatCurrency(v)} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatCurrency(v, currency as any)} />
+              <Tooltip formatter={(v: number) => formatCurrency(v, currency as any)} />
               <Legend />
               <Bar dataKey="income" name="Income" fill="#22c55e" radius={[4, 4, 0, 0]} />
               <Bar dataKey="expenses" name="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
@@ -194,18 +209,24 @@ export default function ReportsPage() {
                   <Cell key={index} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => formatCurrency(v)} />
+              <Tooltip formatter={(v: number) => formatCurrency(v, currency as any)} />
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-2 mt-2">
             {totalPieData.map((d) => (
               <div key={d.name} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+                  <div className={`w-3 h-3 rounded-full ${
+                    d.name === "Income"
+                      ? "bg-emerald-500"
+                      : d.name === "Expenses"
+                        ? "bg-rose-500"
+                        : "bg-blue-500"
+                  }`} />
                   <span className="text-gray-600 dark:text-gray-400">{d.name}</span>
                 </div>
                 <span className="font-medium text-gray-900 dark:text-white">
-                  {formatCurrency(d.value)}
+                  {formatCurrency(d.value, currency as any)}
                 </span>
               </div>
             ))}
@@ -244,28 +265,47 @@ export default function ReportsPage() {
             {data.spendingByCategory.slice(0, 10).map((cat) => {
               const pct =
                 data.totalExpenses > 0 ? (cat.total / data.totalExpenses) * 100 : 0;
+              const progressValue = Math.min(Math.max(pct, 0), 100);
               return (
                 <div key={cat.id}>
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: cat.color }}
-                      />
+                      <div className={`w-3 h-3 rounded-full ${REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length]}`} />
                       <span className="text-sm text-gray-700 dark:text-gray-300">{cat.name}</span>
                       <span className="text-xs text-gray-400">({cat.count} txns)</span>
                     </div>
                     <div className="text-right">
                       <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {formatCurrency(cat.total)}
+                        {formatCurrency(cat.total, currency as any)}
                       </span>
                       <span className="text-xs text-gray-400 ml-2">{pct.toFixed(1)}%</span>
                     </div>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full transition-all"
-                      style={{ width: `${pct}%`, backgroundColor: cat.color }}
+                    <progress
+                      value={progressValue}
+                      max={100}
+                      className={`w-full h-2 [appearance:none] [&::-webkit-progress-bar]:bg-gray-100 dark:[&::-webkit-progress-bar]:bg-gray-700 ${
+                        REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("emerald")
+                          ? "[&::-webkit-progress-value]:bg-emerald-500 [&::-moz-progress-bar]:bg-emerald-500"
+                          : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("rose")
+                            ? "[&::-webkit-progress-value]:bg-rose-500 [&::-moz-progress-bar]:bg-rose-500"
+                            : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("blue")
+                              ? "[&::-webkit-progress-value]:bg-blue-500 [&::-moz-progress-bar]:bg-blue-500"
+                              : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("violet")
+                                ? "[&::-webkit-progress-value]:bg-violet-500 [&::-moz-progress-bar]:bg-violet-500"
+                                : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("amber")
+                                  ? "[&::-webkit-progress-value]:bg-amber-500 [&::-moz-progress-bar]:bg-amber-500"
+                                  : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("cyan")
+                                    ? "[&::-webkit-progress-value]:bg-cyan-500 [&::-moz-progress-bar]:bg-cyan-500"
+                                    : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("fuchsia")
+                                      ? "[&::-webkit-progress-value]:bg-fuchsia-500 [&::-moz-progress-bar]:bg-fuchsia-500"
+                                      : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("lime")
+                                        ? "[&::-webkit-progress-value]:bg-lime-500 [&::-moz-progress-bar]:bg-lime-500"
+                                        : REPORT_COLOR_CLASSES[data.spendingByCategory.indexOf(cat) % REPORT_COLOR_CLASSES.length].includes("orange")
+                                          ? "[&::-webkit-progress-value]:bg-orange-500 [&::-moz-progress-bar]:bg-orange-500"
+                                          : "[&::-webkit-progress-value]:bg-slate-500 [&::-moz-progress-bar]:bg-slate-500"
+                      }`}
                     />
                   </div>
                 </div>

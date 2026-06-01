@@ -59,6 +59,7 @@ export default function TransactionList() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
       toast.success("Transaction deleted");
       setDeleteId(null);
     },
