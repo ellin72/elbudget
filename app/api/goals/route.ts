@@ -2,25 +2,121 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { goalSchema } from "@/lib/validations";
-import { endOfMonth } from "date-fns";
+import { endOfMonth, format, startOfMonth } from "date-fns";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const goals = await prisma.goal.findMany({
-    where: { userId: session.user.id },
-    include: { contributions: { orderBy: { date: "desc" }, take: 5 } },
-    orderBy: { createdAt: "desc" },
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  const [
+    user,
+    goals,
+    monthTransactions,
+    activeBudgets,
+  ] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { monthlyIncome: true },
+    }),
+    prisma.goal.findMany({
+      where: { userId: session.user.id },
+      include: { contributions: { orderBy: { date: "desc" }, take: 5 } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.transaction.findMany({
+      where: {
+        userId: session.user.id,
+        date: { gte: monthStart, lte: monthEnd },
+        type: { in: ["INCOME", "EXPENSE"] },
+      },
+      include: { category: true },
+      orderBy: { date: "desc" },
+    }),
+    prisma.budget.findMany({
+      where: {
+        userId: session.user.id,
+        startDate: { lte: monthEnd },
+        OR: [{ endDate: null }, { endDate: { gte: monthStart } }],
+      },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        items: { select: { categoryId: true } },
+      },
+    }),
+  ]);
+
+  const monthlyTransactionIncome = monthTransactions
+    .filter((t) => t.type === "INCOME")
+    .reduce((sum, t) => sum + t.amount.toNumber(), 0);
+  const monthlyExpenses = monthTransactions
+    .filter((t) => t.type === "EXPENSE")
+    .reduce((sum, t) => sum + t.amount.toNumber(), 0);
+  const declaredMonthlyIncome = user?.monthlyIncome?.toNumber?.() ?? 0;
+  const monthlyIncome = declaredMonthlyIncome > 0 ? declaredMonthlyIncome : monthlyTransactionIncome;
+  const monthlySavings = monthlyIncome - monthlyExpenses;
+
+  const unbudgetedExpenses = monthTransactions.filter((tx) => {
+    if (tx.type !== "EXPENSE") return false;
+
+    const txCategoryId = tx.categoryId ?? null;
+    const covered = activeBudgets.some((budget) => {
+      const inRange = tx.date >= budget.startDate && (!budget.endDate || tx.date <= budget.endDate);
+      if (!inRange) return false;
+      return budget.items.some((item) => (item.categoryId ?? null) === txCategoryId);
+    });
+
+    return !covered;
   });
 
+  const suggestionByCategory = new Map<string, { category: string; amount: number }>();
+  for (const tx of unbudgetedExpenses) {
+    const key = tx.categoryId ?? "uncategorized";
+    const current = suggestionByCategory.get(key);
+    const amount = tx.amount.toNumber();
+    if (!current) {
+      suggestionByCategory.set(key, {
+        category: tx.category?.name ?? "Uncategorized",
+        amount,
+      });
+    } else {
+      current.amount += amount;
+    }
+  }
+
+  const topSuggestions = Array.from(suggestionByCategory.values())
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 3)
+    .map((s) => ({
+      category: s.category,
+      amount: s.amount,
+      suggestion: `Consider reducing ${s.category} by at least ${Math.max(5, Math.round(s.amount * 0.15))}% this month.`,
+    }));
+
   return NextResponse.json({
+    monthlySavings,
+    monthlyIncome,
+    monthlyExpenses,
+    monthLabel: format(now, "MMMM yyyy"),
+    unbudgetedSuggestions: topSuggestions,
     data: goals.map((g) => ({
       ...g,
-      currentAmount: g.currentAmount.toNumber(),
+      currentAmount: monthlySavings,
       targetAmount: g.targetAmount.toNumber(),
       monthlyContrib: g.monthlyContrib?.toNumber() ?? null,
       contributions: g.contributions.map((c) => ({ ...c, amount: c.amount.toNumber() })),
+      challengeStatus: {
+        monthLabel: format(now, "MMMM yyyy"),
+        monthlySavedAmount: monthlySavings,
+        isAchieved: monthlySavings >= g.targetAmount.toNumber(),
+        shortfall: Math.max(0, g.targetAmount.toNumber() - monthlySavings),
+        suggestions: topSuggestions,
+      },
     })),
   });
 }

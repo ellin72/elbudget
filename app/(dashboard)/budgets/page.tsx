@@ -37,6 +37,8 @@ export default function BudgetsPage() {
 
   const totalAllocated = budgets.flatMap((b: any) => b.items ?? []).reduce((s: number, i: any) => s + i.allocatedAmount, 0);
   const totalSpent = budgets.flatMap((b: any) => b.items ?? []).reduce((s: number, i: any) => s + i.spentAmount, 0);
+  const unbudgetedTotal = budgets.reduce((sum: number, b: any) => sum + (b.unbudgetedExpensesTotal ?? 0), 0);
+  const unbudgetedCount = budgets.reduce((sum: number, b: any) => sum + ((b.unbudgetedExpenses ?? []).length), 0);
 
   const { register, handleSubmit, control, reset, formState: { errors } } = useForm<BudgetInput>({
     resolver: zodResolver(budgetSchema),
@@ -160,6 +162,12 @@ export default function BudgetsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {unbudgetedTotal > 0 && (
+        <div className="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          {unbudgetedCount} expense transaction(s) are currently not budgeted: {formatCurrency(unbudgetedTotal, currency as any)}
         </div>
       )}
 

@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
-import { Plus, Target, Loader2, TrendingUp, Calendar, DollarSign } from "lucide-react";
+import { Plus, Target, Loader2, Calendar } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { goalSchema, type GoalInput } from "@/lib/validations";
-import { formatCurrency, getProgressColor, calculatePercentage } from "@/lib/utils";
+import { formatCurrency, calculatePercentage } from "@/lib/utils";
 import { useUIStore } from "@/store/useUIStore";
 import { format, differenceInDays, endOfMonth } from "date-fns";
 
@@ -18,40 +19,23 @@ async function fetchGoals() {
 }
 
 function GoalCard({ goal, currency }: { goal: any; currency: string }) {
-  const queryClient = useQueryClient();
-  const [contributing, setContributing] = useState(false);
-  const [amount, setAmount] = useState("");
-  const pct = calculatePercentage(goal.currentAmount, goal.targetAmount);
-  const color = getProgressColor(pct);
+  const trackedAmount = Number(goal.challengeStatus?.monthlySavedAmount ?? goal.currentAmount ?? 0);
+  const targetAmount = Number(goal.targetAmount ?? 0);
+  const pct = calculatePercentage(trackedAmount, targetAmount);
+  const achieved = Boolean(goal.challengeStatus?.isAchieved ?? (trackedAmount >= targetAmount));
+  const shortfall = Number(goal.challengeStatus?.shortfall ?? Math.max(0, targetAmount - trackedAmount));
+  const suggestions = goal.challengeStatus?.suggestions ?? [];
+  const progressValue = Math.min(Math.max(pct, 0), 100);
   const daysLeft = goal.targetDate ? differenceInDays(new Date(goal.targetDate), new Date()) : null;
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/goals/${goal.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: Number(amount), date: new Date().toISOString().split("T")[0] }),
-      });
-      if (!res.ok) throw new Error("Failed");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["goals"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      toast.success("Contribution added!");
-      setContributing(false);
-      setAmount("");
-    },
-    onError: () => toast.error("Failed to add contribution"),
-  });
 
   return (
     <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-semibold">{goal.name}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Monthly savings challenge</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Auto-tracked from this month&apos;s savings</p>
         </div>
-        <span className={`text-xs px-2 py-1 rounded-full font-medium ${pct >= 100 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}>
+        <span className={`text-xs px-2 py-1 rounded-full font-medium ${achieved ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
           {pct.toFixed(0)}%
         </span>
       </div>
@@ -59,11 +43,19 @@ function GoalCard({ goal, currency }: { goal: any; currency: string }) {
       {/* Progress */}
       <div className="space-y-1.5">
         <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Saved</span>
-          <span className="font-medium">{formatCurrency(goal.currentAmount, currency as any)} / {formatCurrency(goal.targetAmount, currency as any)}</span>
+          <span className="text-muted-foreground">Saved This Month</span>
+          <span className="font-medium">{formatCurrency(trackedAmount, currency as any)} / {formatCurrency(targetAmount, currency as any)}</span>
         </div>
         <div className="h-2 rounded-full bg-muted overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${color === "green" ? "bg-green-500" : color === "yellow" ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+          <progress
+            value={progressValue}
+            max={100}
+            className={`w-full h-2 [appearance:none] [&::-webkit-progress-bar]:bg-muted ${
+              achieved
+                ? "[&::-webkit-progress-value]:bg-green-500 [&::-moz-progress-bar]:bg-green-500"
+                : "[&::-webkit-progress-value]:bg-red-500 [&::-moz-progress-bar]:bg-red-500"
+            }`}
+          />
         </div>
       </div>
 
@@ -74,31 +66,34 @@ function GoalCard({ goal, currency }: { goal: any; currency: string }) {
         </div>
       )}
 
-      {contributing ? (
-        <div className="flex gap-2">
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="Amount"
-            className="flex-1 px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <button
-            onClick={() => mutation.mutate()}
-            disabled={!amount || mutation.isPending}
-            className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium flex items-center gap-1 hover:bg-primary/90 disabled:opacity-50"
+      {!achieved ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300 space-y-2">
+          <p className="font-medium">
+            Challenge is behind by {formatCurrency(shortfall, currency as any)}.
+          </p>
+          {suggestions.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase tracking-wide opacity-80">Where to spend less (unbudgeted)</p>
+              {suggestions.map((item: any) => (
+                <p key={item.category}>
+                  {item.category}: {formatCurrency(Number(item.amount), currency as any)}. {item.suggestion}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p>No unbudgeted spending found this month. Focus on reducing discretionary expenses.</p>
+          )}
+          <Link
+            href="/transactions?unbudgetedOnly=true"
+            className="inline-flex items-center rounded-lg border border-red-300/70 px-2.5 py-1.5 text-[11px] font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
           >
-            {mutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
-          </button>
-          <button onClick={() => setContributing(false)} className="px-3 py-2 rounded-xl border border-border text-sm hover:bg-accent">Cancel</button>
+            Review Unbudgeted Transactions
+          </Link>
         </div>
       ) : (
-        <button
-          onClick={() => setContributing(true)}
-          className="w-full py-2 rounded-xl border border-dashed border-primary/40 text-primary text-sm font-medium hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
-        >
-          <Plus className="w-3.5 h-3.5" /> Add Progress
-        </button>
+        <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700 dark:border-green-900/40 dark:bg-green-950/20 dark:text-green-300">
+          Challenge on track. Keep this momentum through month end.
+        </div>
       )}
     </div>
   );

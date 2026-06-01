@@ -3,11 +3,38 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+function addByFrequency(date: Date, frequency: string) {
+  const d = new Date(date);
+  switch (frequency) {
+    case "DAILY":
+      d.setDate(d.getDate() + 1);
+      return d;
+    case "WEEKLY":
+      d.setDate(d.getDate() + 7);
+      return d;
+    case "BIWEEKLY":
+      d.setDate(d.getDate() + 14);
+      return d;
+    case "MONTHLY":
+      d.setMonth(d.getMonth() + 1);
+      return d;
+    case "QUARTERLY":
+      d.setMonth(d.getMonth() + 3);
+      return d;
+    case "YEARLY":
+      d.setFullYear(d.getFullYear() + 1);
+      return d;
+    default:
+      return d;
+  }
+}
+
 const updateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
   nextDueDate: z.string().optional(),
   notes: z.string().optional().nullable(),
+  markPaid: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -38,11 +65,61 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  if (parsed.data.markPaid) {
+    if (!item.isActive) {
+      return NextResponse.json(
+        { error: "Only active recurring items can be marked as paid." },
+        { status: 400 }
+      );
+    }
+
+    const paidAt = new Date();
+    let nextDueDate = addByFrequency(item.nextDueDate, item.frequency);
+    let safety = 0;
+    while (nextDueDate <= paidAt && safety < 36) {
+      nextDueDate = addByFrequency(nextDueDate, item.frequency);
+      safety += 1;
+    }
+
+    const [, updatedItem] = await prisma.$transaction([
+      prisma.transaction.create({
+        data: {
+          userId: session.user.id,
+          categoryId: item.categoryId,
+          type: item.type,
+          amount: item.amount,
+          description: `${item.name} (Recurring)`,
+          date: paidAt,
+          notes: "Created from recurring item payment",
+          isRecurring: true,
+          recurringId: item.id,
+          tags: "[]",
+        },
+      }),
+      prisma.recurringItem.update({
+        where: { id },
+        data: {
+          lastPaid: paidAt,
+          nextDueDate,
+        },
+        include: { category: true },
+      }),
+    ]);
+
+    return NextResponse.json({
+      ...updatedItem,
+      amount: updatedItem.amount.toNumber(),
+      paymentRecorded: true,
+    });
+  }
+
+  const { markPaid, ...rest } = parsed.data;
+
   const updated = await prisma.recurringItem.update({
     where: { id },
     data: {
-      ...parsed.data,
-      nextDueDate: parsed.data.nextDueDate ? new Date(parsed.data.nextDueDate) : undefined,
+      ...rest,
+      nextDueDate: rest.nextDueDate ? new Date(rest.nextDueDate) : undefined,
     },
     include: { category: true },
   });
@@ -63,6 +140,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   });
   if (!item) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (item.isActive) {
+    return NextResponse.json(
+      { error: "Stop this recurring item before deleting it." },
+      { status: 400 }
+    );
   }
 
   await prisma.recurringItem.delete({ where: { id } });

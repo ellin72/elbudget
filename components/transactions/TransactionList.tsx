@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowDownLeft,
   ArrowLeftRight,
@@ -24,6 +25,10 @@ import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { TransactionWithCategory } from "@/types";
 
+type TransactionListItem = TransactionWithCategory & {
+  isBudgeted?: boolean | null;
+};
+
 async function fetchTransactions(page: number, pageSize: number, filters: any) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   Object.entries(filters).forEach(([k, v]) => v && params.set(k, String(v)));
@@ -33,6 +38,7 @@ async function fetchTransactions(page: number, pageSize: number, filters: any) {
 }
 
 export default function TransactionList() {
+  const searchParams = useSearchParams();
   const { currency } = useUIStore();
   const { page, pageSize, filters, setPage, setFilters, selectedTransaction, setSelectedTransaction, editModalOpen, setEditModalOpen } = useTransactionStore();
   const queryClient = useQueryClient();
@@ -59,9 +65,16 @@ export default function TransactionList() {
     onError: () => toast.error("Failed to delete transaction"),
   });
 
-  const transactions: TransactionWithCategory[] = data?.data ?? [];
+  const transactions: TransactionListItem[] = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
+
+  useEffect(() => {
+    const showUnbudgetedOnly = searchParams.get("unbudgetedOnly") === "true";
+    if (showUnbudgetedOnly && !filters.unbudgetedOnly) {
+      setFilters({ unbudgetedOnly: true });
+    }
+  }, [searchParams, filters.unbudgetedOnly, setFilters]);
 
   return (
     <div className="space-y-4">
@@ -79,6 +92,8 @@ export default function TransactionList() {
         </div>
         <div className="flex gap-2">
           <select
+            title="Filter transactions by type"
+            aria-label="Filter transactions by type"
             value={filters.type ?? ""}
             onChange={(e) => setFilters({ type: (e.target.value || undefined) as any })}
             className="px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -88,6 +103,20 @@ export default function TransactionList() {
             <option value="EXPENSE">Expense</option>
             <option value="TRANSFER">Transfer</option>
           </select>
+          <button
+            type="button"
+            onClick={() => setFilters({ unbudgetedOnly: !filters.unbudgetedOnly })}
+            title="Show only unbudgeted expenses"
+            aria-label="Show only unbudgeted expenses"
+            className={cn(
+              "px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors",
+              filters.unbudgetedOnly
+                ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+                : "border-input bg-background text-foreground hover:bg-accent"
+            )}
+          >
+            Only Unbudgeted
+          </button>
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 shadow-glow"
@@ -118,6 +147,7 @@ export default function TransactionList() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Category</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide hidden md:table-cell">Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Budget</th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Amount</th>
                   <th className="px-4 py-3 w-20" />
                 </tr>
@@ -146,6 +176,19 @@ export default function TransactionList() {
                     <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
                       {format(new Date(tx.date), "MMM d, yyyy")}
                     </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {tx.type !== "EXPENSE" ? (
+                        <span className="text-xs text-muted-foreground">N/A</span>
+                      ) : tx.isBudgeted ? (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                          Budgeted
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                          Unbudgeted
+                        </span>
+                      )}
+                    </td>
                     <td className={cn(
                       "px-4 py-3 text-right font-semibold tabular-nums",
                       tx.type === "INCOME" && "text-green-600 dark:text-green-400",
@@ -159,12 +202,16 @@ export default function TransactionList() {
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => { setSelectedTransaction(tx); setEditModalOpen(true); }}
+                          title="Edit transaction"
+                          aria-label="Edit transaction"
                           className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-accent text-muted-foreground"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setDeleteId(tx.id)}
+                          title="Delete transaction"
+                          aria-label="Delete transaction"
                           className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -188,6 +235,8 @@ export default function TransactionList() {
               <button
                 onClick={() => setPage(page - 1)}
                 disabled={page <= 1}
+                title="Previous page"
+                aria-label="Previous page"
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -195,6 +244,8 @@ export default function TransactionList() {
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={page >= totalPages}
+                title="Next page"
+                aria-label="Next page"
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="w-4 h-4" />

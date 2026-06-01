@@ -160,6 +160,7 @@ export interface FilterOptions {
   minAmount?: number;
   maxAmount?: number;
   search?: string;
+  unbudgetedOnly?: boolean;
   page?: number;
   pageSize?: number;
 }

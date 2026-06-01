@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { GoalWithContributions } from "@/types";
-import { formatCurrency, calculatePercentage, getProgressColor } from "@/lib/utils";
+import { formatCurrency, calculatePercentage } from "@/lib/utils";
 
 interface Props {
   goals: GoalWithContributions[];
@@ -38,7 +38,8 @@ export default function SavingsProgress({ goals, currency = "NAD" }: Props) {
       <div className="space-y-4">
         {goals.slice(0, 4).map((goal) => {
           const progress = calculatePercentage(Number(goal.currentAmount), Number(goal.targetAmount));
-          const color = getProgressColor(progress);
+          const achieved = progress >= 100;
+          const progressValue = Math.min(Math.max(progress, 0), 100);
           return (
             <div key={goal.id}>
               <div className="flex items-center justify-between mb-1.5">
@@ -49,9 +50,14 @@ export default function SavingsProgress({ goals, currency = "NAD" }: Props) {
                 <span className="text-xs font-semibold text-muted-foreground">{progress.toFixed(0)}%</span>
               </div>
               <div className="progress-track">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(progress, 100)}%`, backgroundColor: color }}
+                <progress
+                  value={progressValue}
+                  max={100}
+                  className={`w-full h-full [appearance:none] [&::-webkit-progress-bar]:bg-transparent ${
+                    achieved
+                      ? "[&::-webkit-progress-value]:bg-green-500 [&::-moz-progress-bar]:bg-green-500"
+                      : "[&::-webkit-progress-value]:bg-red-500 [&::-moz-progress-bar]:bg-red-500"
+                  }`}
                 />
               </div>
               <div className="flex items-center justify-between mt-1">

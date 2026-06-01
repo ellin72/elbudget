@@ -22,6 +22,7 @@ interface RecurringItem {
   frequency: string;
   isActive: boolean;
   nextDueDate: string;
+  lastPaid?: string | null;
   category: { name: string; color: string; icon: string } | null;
 }
 
@@ -127,6 +128,29 @@ export default function RecurringPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
       toast.success("Deleted");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/recurring/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markPaid: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to mark recurring item as paid");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      toast.success("Payment recorded and added to transactions");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -293,6 +317,7 @@ export default function RecurringPage() {
             <RecurringItemCard
               key={item.id}
               item={item}
+              onMarkPaid={(id) => markPaidMutation.mutate(id)}
               onToggle={(id, isActive) => toggleMutation.mutate({ id, isActive })}
               onDelete={(id) => deleteMutation.mutate(id)}
             />
@@ -308,6 +333,7 @@ export default function RecurringPage() {
             <RecurringItemCard
               key={item.id}
               item={item}
+              onMarkPaid={(id) => markPaidMutation.mutate(id)}
               onToggle={(id, isActive) => toggleMutation.mutate({ id, isActive })}
               onDelete={(id) => deleteMutation.mutate(id)}
             />
@@ -337,10 +363,12 @@ export default function RecurringPage() {
 
 function RecurringItemCard({
   item,
+  onMarkPaid,
   onToggle,
   onDelete,
 }: {
   item: RecurringItem;
+  onMarkPaid: (id: string) => void;
   onToggle: (id: string, isActive: boolean) => void;
   onDelete: (id: string) => void;
 }) {
@@ -370,6 +398,12 @@ function RecurringItemCard({
           <span>{FREQUENCY_LABELS[item.frequency]}</span>
           <span>·</span>
           <span className={isOverdue ? "text-red-500 font-medium" : ""}>{dueLabel}</span>
+          {item.lastPaid && (
+            <>
+              <span>·</span>
+              <span>Last paid {format(new Date(item.lastPaid), "MMM d, yyyy")}</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -389,6 +423,15 @@ function RecurringItemCard({
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         <button
+          onClick={() => onMarkPaid(item.id)}
+          title={item.isActive ? "Mark as paid" : "Resume item to mark as paid"}
+          disabled={!item.isActive}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        >
+          <CheckCircleIcon className="w-3.5 h-3.5" />
+          <span>Mark Paid</span>
+        </button>
+        <button
           onClick={() => onToggle(item.id, !item.isActive)}
           title={item.isActive ? "Stop recurring item" : "Resume recurring item"}
           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -407,8 +450,9 @@ function RecurringItemCard({
         </button>
         <button
           onClick={() => onDelete(item.id)}
-          title="Delete"
-          className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          title={item.isActive ? "Stop item before deleting" : "Delete"}
+          disabled={item.isActive}
+          className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-400 disabled:hover:bg-transparent"
         >
           <TrashIcon className="w-4 h-4" />
         </button>

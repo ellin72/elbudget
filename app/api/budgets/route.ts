@@ -66,6 +66,58 @@ export async function GET() {
     }),
   ]);
 
+  const budgetSpendSnapshots = await Promise.all(
+    budgets.map(async (budget) => {
+      const expenses = await prisma.transaction.findMany({
+        where: {
+          userId: session.user.id,
+          type: "EXPENSE",
+          date: {
+            gte: budget.startDate,
+            lte: budget.endDate ?? now,
+          },
+        },
+        select: {
+          id: true,
+          amount: true,
+          categoryId: true,
+          description: true,
+          date: true,
+        },
+      });
+
+      const spentByCategory = new Map<string, number>();
+      for (const tx of expenses) {
+        const key = tx.categoryId ?? "__uncategorized__";
+        spentByCategory.set(key, (spentByCategory.get(key) ?? 0) + tx.amount.toNumber());
+      }
+
+      const budgetedCategoryKeys = new Set(
+        budget.items.map((item) => item.categoryId ?? "__uncategorized__")
+      );
+
+      const unbudgetedExpenses = expenses
+        .filter((tx) => !budgetedCategoryKeys.has(tx.categoryId ?? "__uncategorized__"))
+        .map((tx) => ({
+          id: tx.id,
+          description: tx.description,
+          amount: tx.amount.toNumber(),
+          date: tx.date,
+          categoryId: tx.categoryId,
+        }));
+
+      return {
+        budgetId: budget.id,
+        spentByCategory,
+        unbudgetedExpenses,
+      };
+    })
+  );
+
+  const spendByBudgetId = new Map(
+    budgetSpendSnapshots.map((snapshot) => [snapshot.budgetId, snapshot])
+  );
+
   const recurringExpenseMonthlyItems = recurringItems
     .filter((item) => item.type === "EXPENSE")
     .map((item) => {
@@ -106,10 +158,12 @@ export async function GET() {
 
   return NextResponse.json({
     data: budgets.map((b) => {
+      const spendSnapshot = spendByBudgetId.get(b.id);
       const baseItems = b.items.map((i) => ({
         ...i,
         allocatedAmount: i.allocatedAmount.toNumber(),
-        spentAmount: i.spentAmount.toNumber(),
+        spentAmount:
+          spendSnapshot?.spentByCategory.get(i.categoryId ?? "__uncategorized__") ?? 0,
       }));
 
       const includeRecurring = b.id === primaryMonthlyBudgetId;
@@ -120,6 +174,11 @@ export async function GET() {
         ...b,
         totalAmount,
         items,
+        unbudgetedExpenses: spendSnapshot?.unbudgetedExpenses ?? [],
+        unbudgetedExpensesTotal: (spendSnapshot?.unbudgetedExpenses ?? []).reduce(
+          (sum, tx) => sum + tx.amount,
+          0
+        ),
       };
     }),
     recurringMonthlyTotal,
