@@ -180,6 +180,10 @@ export default function TransactionList() {
                     <td className="px-4 py-3 hidden lg:table-cell">
                       {tx.type !== "EXPENSE" ? (
                         <span className="text-xs text-muted-foreground">N/A</span>
+                      ) : tx.isBudgeted && tx.recurringId ? (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                          Recurring Budgeted
+                        </span>
                       ) : tx.isBudgeted ? (
                         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
                           Budgeted

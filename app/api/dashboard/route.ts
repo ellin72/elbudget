@@ -65,7 +65,7 @@ export async function GET() {
       select: { currentBalance: true, originalAmount: true },
     }),
     prisma.aIInsight.findMany({
-      where: { userId, isRead: false },
+      where: { userId },
       orderBy: { createdAt: "desc" },
       take: 3,
     }),
@@ -120,6 +120,48 @@ export async function GET() {
     }))
     .slice(0, 6);
 
+  const fallbackInsights = [] as Array<{
+    id: string;
+    type: string;
+    title: string;
+    content: string;
+    isRead: boolean;
+    createdAt: Date;
+  }>;
+  if (monthlyExpenses > monthlyIncome && monthlyIncome > 0) {
+    fallbackInsights.push({
+      id: "fallback-budget-warning",
+      type: "BUDGET_WARNING",
+      title: "Expenses are above income this month",
+      content: `You are overspending by ${(monthlyExpenses - monthlyIncome).toFixed(2)}. Focus on reducing unbudgeted categories first.`,
+      isRead: false,
+      createdAt: new Date(),
+    });
+  } else {
+    fallbackInsights.push({
+      id: "fallback-savings-opportunity",
+      type: "SAVINGS_OPPORTUNITY",
+      title: "Savings trend looks healthy",
+      content: `You are currently saving ${(savingsRate).toFixed(1)}% of your income this month. Keep your top expense categories under control to maintain this pace.`,
+      isRead: false,
+      createdAt: new Date(),
+    });
+  }
+
+  if (spendingByCategory.length > 0) {
+    const topCategory = spendingByCategory[0];
+    fallbackInsights.push({
+      id: "fallback-spending-alert",
+      type: "SPENDING_ALERT",
+      title: `Top spending category: ${topCategory.category}`,
+      content: `${topCategory.category} accounts for ${topCategory.percentage.toFixed(1)}% of this month's expenses.`,
+      isRead: false,
+      createdAt: new Date(),
+    });
+  }
+
+  const insightsToShow = activeInsights.length > 0 ? activeInsights : fallbackInsights;
+
   const dashboardData: DashboardData = {
     stats: {
       totalBalance: monthlySavings,
@@ -147,12 +189,17 @@ export async function GET() {
     })) as any,
     activeGoals: activeGoals.map((g) => ({
       ...g,
-      currentAmount: g.currentAmount.toNumber(),
+      currentAmount: monthlySavings,
       targetAmount: g.targetAmount.toNumber(),
       monthlyContrib: g.monthlyContrib?.toNumber() ?? null,
       contributions: g.contributions.map((c) => ({ ...c, amount: c.amount.toNumber() })),
+      challengeStatus: {
+        monthlySavedAmount: monthlySavings,
+        isAchieved: monthlySavings >= g.targetAmount.toNumber(),
+        shortfall: Math.max(0, g.targetAmount.toNumber() - monthlySavings),
+      },
     })) as any,
-    aiInsights: activeInsights,
+    aiInsights: insightsToShow as any,
   };
 
   return NextResponse.json({ data: dashboardData });

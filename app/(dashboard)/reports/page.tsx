@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -60,6 +61,7 @@ const REPORT_COLOR_CLASSES = [
 ];
 
 export default function ReportsPage() {
+  const { data: session } = useSession();
   const { currency } = useUIStore();
   const [months, setMonths] = useState("6");
 
@@ -102,15 +104,17 @@ export default function ReportsPage() {
     doc.text("Elbudget Financial Report", 40, 48);
     doc.setFontSize(10);
     doc.setTextColor(90);
-    doc.text(`Period: ${periodLabel}`, 40, 68);
-    doc.text(`Generated: ${generatedAt.toLocaleString()}`, 40, 82);
+    const reportOwner = session?.user?.name || "User";
+    doc.text(`Prepared for: ${reportOwner}`, 40, 68);
+    doc.text(`Period: ${periodLabel}`, 40, 82);
+    doc.text(`Generated: ${generatedAt.toLocaleString()}`, 40, 96);
 
     doc.setFontSize(12);
     doc.setTextColor(30);
-    doc.text("Summary", 40, 112);
+    doc.text("Summary", 40, 126);
 
     autoTable(doc, {
-      startY: 122,
+      startY: 136,
       theme: "grid",
       head: [["Metric", "Value"]],
       body: [

@@ -55,6 +55,25 @@ export async function GET(request: Request) {
         })
       : [];
 
+    const recurringExpenseIdsInTransactions = Array.from(
+      new Set(
+        txs
+          .filter((transaction) => transaction.type === "EXPENSE" && !!transaction.recurringId)
+          .map((transaction) => transaction.recurringId as string)
+      )
+    );
+    const recurringExpenseItems = recurringExpenseIdsInTransactions.length > 0
+      ? await prisma.recurringItem.findMany({
+          where: {
+            userId: session.user.id,
+            type: "EXPENSE",
+            id: { in: recurringExpenseIdsInTransactions },
+          },
+          select: { id: true },
+        })
+      : [];
+    const recurringExpenseIdSet = new Set(recurringExpenseItems.map((item) => item.id));
+
     return txs.map((t) => ({
       ...t,
       amount: t.amount.toNumber(),
@@ -63,6 +82,8 @@ export async function GET(request: Request) {
       isBudgeted:
         t.type !== "EXPENSE"
           ? null
+          : t.recurringId && recurringExpenseIdSet.has(t.recurringId)
+            ? true
           : budgetCategoryWindows.some((budget) => {
               const withinRange =
                 t.date >= budget.startDate &&
