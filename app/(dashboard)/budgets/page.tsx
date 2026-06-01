@@ -33,6 +33,7 @@ export default function BudgetsPage() {
   const budgets = data?.data ?? [];
   const categories = catData?.data ?? [];
   const recurringMonthlyTotal = data?.recurringMonthlyTotal ?? 0;
+  const recurringMonthlyIncomeTotal = data?.recurringMonthlyIncomeTotal ?? 0;
 
   const totalAllocated = budgets.flatMap((b: any) => b.items ?? []).reduce((s: number, i: any) => s + i.allocatedAmount, 0);
   const totalSpent = budgets.flatMap((b: any) => b.items ?? []).reduce((s: number, i: any) => s + i.spentAmount, 0);
@@ -331,6 +332,12 @@ export default function BudgetsPage() {
       {recurringMonthlyTotal > 0 && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
           Fixed recurring services are automatically included in your monthly budget: {formatCurrency(recurringMonthlyTotal, currency as any)}
+        </div>
+      )}
+
+      {recurringMonthlyIncomeTotal > 0 && (
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900/40 dark:bg-green-950/20 dark:text-green-400">
+          Recurring income is automatically included in monthly planning: {formatCurrency(recurringMonthlyIncomeTotal, currency as any)}
         </div>
       )}
     </div>
