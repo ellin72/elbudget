@@ -42,10 +42,17 @@ export default function LandingPage() {
   ];
 
   const stats = [
-    { value: "10K+", label: "Active Users" },
-    { value: "N$2M+", label: "Money Managed" },
-    { value: "95%", label: "User Satisfaction" },
-    { value: "4.9★", label: "App Rating" },
+    { value: "Public Beta", label: "Current Product Stage" },
+    { value: "AI + Rules", label: "Insights Approach" },
+    { value: "CSV / PDF", label: "Report Exports" },
+    { value: "Roadmap", label: "Bank Sync Status" },
+  ];
+
+  const categoryPreview = [
+    { name: "Food & Dining", dotClass: "bg-indigo-500", barClass: "w-[70%] bg-indigo-500" },
+    { name: "Transport", dotClass: "bg-emerald-500", barClass: "w-[45%] bg-emerald-500" },
+    { name: "Entertainment", dotClass: "bg-amber-500", barClass: "w-[30%] bg-amber-500" },
+    { name: "Utilities", dotClass: "bg-red-500", barClass: "w-[55%] bg-red-500" },
   ];
 
   return (
@@ -162,12 +169,12 @@ export default function LandingPage() {
                     </div>
                   </div>
                   <div className="rounded-2xl border border-border/50 bg-background/50 p-4 h-40 flex flex-col gap-3 justify-center px-6">
-                    {["Food & Dining", "Transport", "Entertainment", "Utilities"].map((cat, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full" style={{ background: ["#6366f1", "#10b981", "#f59e0b", "#ef4444"][i] }} />
-                        <span className="text-xs text-muted-foreground flex-1">{cat}</span>
+                    {categoryPreview.map((category) => (
+                      <div key={category.name} className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${category.dotClass}`} />
+                        <span className="text-xs text-muted-foreground flex-1">{category.name}</span>
                         <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${[70, 45, 30, 55][i]}%`, background: ["#6366f1", "#10b981", "#f59e0b", "#ef4444"][i] }} />
+                          <div className={`h-full rounded-full ${category.barClass}`} />
                         </div>
                       </div>
                     ))}
@@ -310,7 +317,7 @@ export default function LandingPage() {
                   "PDF, Excel, CSV exports",
                   "Debt payoff strategies",
                   "Priority support",
-                  "Bank sync (coming soon)",
+                  "Bank sync (planned roadmap feature)",
                 ].map((f) => (
                   <li key={f} className="flex items-center gap-2">
                     <span className="text-primary">✓</span> {f}
@@ -318,7 +325,7 @@ export default function LandingPage() {
                 ))}
               </ul>
               <Link href="/register" className="block w-full text-center py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors shadow-glow">
-                Start 14-Day Free Trial
+                Request Premium Early Access
               </Link>
             </div>
           </div>
@@ -333,8 +340,8 @@ export default function LandingPage() {
             Ready to take control of your finances?
           </h2>
           <p className="text-muted-foreground text-lg mb-8">
-            Join thousands of users who have transformed their financial lives
-            with Elbudget.
+            Start building better money habits with a practical budgeting
+            workflow designed for everyday use.
           </p>
           <Link
             href="/register"

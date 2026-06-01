@@ -25,11 +25,12 @@ export default function LoginPage() {
     const result = await signIn("credentials", {
       email: data.email,
       password: data.password,
+      twoFactorCode: data.twoFactorCode,
       redirect: false,
     });
 
     if (result?.error) {
-      toast.error("Invalid email or password. Please try again.");
+      toast.error("Sign-in failed. Check your credentials and 2FA code.");
       return;
     }
 
@@ -123,6 +124,20 @@ export default function LoginPage() {
           </div>
           {errors.password && (
             <p className="text-xs text-destructive">{errors.password.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Authenticator Code (if enabled)</label>
+          <input
+            {...register("twoFactorCode")}
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="123456"
+            className="w-full px-4 py-3 rounded-xl border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+          />
+          {errors.twoFactorCode && (
+            <p className="text-xs text-destructive">{errors.twoFactorCode.message as string}</p>
           )}
         </div>
 

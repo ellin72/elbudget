@@ -8,6 +8,7 @@ import {
   calculateCurrentPeriodStats,
   type FinancialTransaction,
 } from "@/lib/financial";
+import { enforceCreationLimit } from "@/lib/subscription";
 
 export async function GET() {
   const session = await auth();
@@ -138,6 +139,16 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const quota = await enforceCreationLimit(session.user.id, "goals");
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: `Your ${quota.plan} plan allows up to ${quota.limit} goals. Upgrade to create more.`,
+      },
+      { status: 403 }
+    );
+  }
 
   const body = await request.json();
   const parsed = goalSchema.safeParse(body);

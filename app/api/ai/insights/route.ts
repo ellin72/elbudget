@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateMonthlyInsights } from "@/lib/ai";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { enforceAiInsightsQuota } from "@/lib/subscription";
+import { logAuditEvent } from "@/lib/server/audit";
 
 export async function GET() {
   const session = await auth();
@@ -22,6 +25,28 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rateLimitResponse = enforceRateLimit(req, "ai-insights", {
+    max: 5,
+    windowMs: 60_000,
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
+  const quota = await enforceAiInsightsQuota(session.user.id);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: "AI insights quota reached for current plan",
+        plan: quota.plan,
+        usage: {
+          used: quota.used,
+          limit: quota.limit,
+          remaining: quota.remaining,
+        },
+      },
+      { status: 429 }
+    );
   }
 
   // Check if insights were already generated this month
@@ -60,6 +85,21 @@ export async function POST(req: NextRequest) {
       })
     )
   );
+
+  await logAuditEvent({
+    userId: session.user.id,
+    action: "AI_INSIGHTS_GENERATED",
+    resource: "ai-insights",
+    request: req,
+    metadata: {
+      plan: quota.plan,
+      generatedCount: created.length,
+      usage: {
+        usedBefore: quota.used,
+        limit: quota.limit,
+      },
+    },
+  });
 
   return NextResponse.json(created, { status: 201 });
 }

@@ -11,6 +11,8 @@ interface Message {
   role: "USER" | "ASSISTANT";
   content: string;
   createdAt: string;
+  confidence?: "low" | "medium" | "high";
+  disclaimer?: string;
 }
 
 export default function AIAssistantPage() {
@@ -30,8 +32,14 @@ export default function AIAssistantPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, conversationId }),
       });
-      if (!res.ok) throw new Error("Failed to send message");
-      return res.json();
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload?.error || payload?.reason || "Failed to send message");
+      }
+      if (payload?.data?.blocked) {
+        throw new Error(`${payload.data.reason}. Upgrade plan or wait for monthly reset.`);
+      }
+      return payload;
     },
     onSuccess: (data) => {
       setConversationId(data.data.conversationId);
@@ -67,6 +75,9 @@ export default function AIAssistantPage() {
           <Sparkles className="w-5 h-5 text-primary" /> AI Financial Assistant
         </h2>
         <p className="text-sm text-muted-foreground">Ask anything about your finances — powered by GPT-4o mini</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          AI responses are educational only and not financial, investment, or tax advice.
+        </p>
       </div>
 
       <div className="flex-1 bg-card rounded-2xl border border-border flex flex-col overflow-hidden">
@@ -121,6 +132,12 @@ export default function AIAssistantPage() {
                   : "bg-muted rounded-tl-sm"
               )}>
                 {msg.content}
+                {msg.role === "ASSISTANT" && (
+                  <div className="mt-2 text-[11px] text-muted-foreground">
+                    {msg.confidence ? `Confidence: ${msg.confidence}. ` : ""}
+                    {msg.disclaimer ?? "Educational guidance only."}
+                  </div>
+                )}
               </div>
             </div>
           ))}

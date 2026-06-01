@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
+import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -65,6 +66,11 @@ export default function ReportsPage() {
   const { currency } = useUIStore();
   const [months, setMonths] = useState("6");
 
+  const { data: billingData } = useQuery<{ data: { capabilities: { exportFormats: string[] } } }>({
+    queryKey: ["billing-subscription"],
+    queryFn: () => fetch("/api/billing/subscription").then((r) => r.json()),
+  });
+
   const { data, isLoading } = useQuery<ReportData>({
     queryKey: ["reports", months],
     queryFn: () => fetch(`/api/reports?months=${months}`).then((r) => r.json()),
@@ -95,6 +101,11 @@ export default function ReportsPage() {
 
   function exportPDF() {
     if (!data) return;
+    const allowedFormats = billingData?.data?.capabilities?.exportFormats ?? ["csv"];
+    if (!allowedFormats.includes("pdf")) {
+      toast.info("PDF export is a premium feature. CSV export is available on the free plan.");
+      return;
+    }
 
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const generatedAt = new Date();
@@ -215,10 +226,11 @@ export default function ReportsPage() {
           </button>
           <button
             onClick={exportPDF}
+            disabled={!(billingData?.data?.capabilities?.exportFormats ?? ["csv"]).includes("pdf")}
             className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm transition-colors"
           >
             <DownloadIcon className="w-4 h-4" />
-            Export PDF
+            Export PDF {!(billingData?.data?.capabilities?.exportFormats ?? ["csv"]).includes("pdf") ? "(Premium)" : ""}
           </button>
         </div>
       </div>

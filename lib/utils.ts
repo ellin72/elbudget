@@ -39,6 +39,16 @@ export function formatCurrency(
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
   if (isNaN(num)) return `${currencySymbols[currency]}0.00`;
 
+  if (currency === "NAD") {
+    const formatted = new Intl.NumberFormat(currencyLocales[currency], {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      ...options,
+      style: "decimal",
+    }).format(num);
+    return `${currencySymbols.NAD}${formatted}`;
+  }
+
   return new Intl.NumberFormat(currencyLocales[currency], {
     style: "currency",
     currency,

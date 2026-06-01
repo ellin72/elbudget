@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { debtSchema } from "@/lib/validations";
+import { enforceCreationLimit } from "@/lib/subscription";
 
 export async function GET() {
   const session = await auth();
@@ -28,6 +29,16 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const quota = await enforceCreationLimit(session.user.id, "debts");
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: `Your ${quota.plan} plan allows up to ${quota.limit} active debts. Upgrade to create more.`,
+      },
+      { status: 403 }
+    );
+  }
 
   const body = await request.json();
   const parsed = debtSchema.safeParse(body);

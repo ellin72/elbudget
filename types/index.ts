@@ -231,6 +231,9 @@ export interface SubscriptionFeatures {
   maxGoals: number | null;
   maxDebts: number | null;
   aiInsights: boolean;
+  aiMessagesPerMonth: number | null;
+  aiInsightsPerMonth: number | null;
+  maxReportMonths: number | null;
   advancedReports: boolean;
   bankSync: boolean;
   exportFormats: string[];
@@ -242,7 +245,10 @@ export const PLAN_FEATURES: Record<string, SubscriptionFeatures> = {
     maxBudgets: 3,
     maxGoals: 3,
     maxDebts: 5,
-    aiInsights: false,
+    aiInsights: true,
+    aiMessagesPerMonth: 30,
+    aiInsightsPerMonth: 3,
+    maxReportMonths: 6,
     advancedReports: false,
     bankSync: false,
     exportFormats: ["csv"],
@@ -253,6 +259,9 @@ export const PLAN_FEATURES: Record<string, SubscriptionFeatures> = {
     maxGoals: null,
     maxDebts: null,
     aiInsights: true,
+    aiMessagesPerMonth: null,
+    aiInsightsPerMonth: null,
+    maxReportMonths: 12,
     advancedReports: true,
     bankSync: true,
     exportFormats: ["csv", "pdf", "xlsx"],
@@ -263,6 +272,9 @@ export const PLAN_FEATURES: Record<string, SubscriptionFeatures> = {
     maxGoals: null,
     maxDebts: null,
     aiInsights: true,
+    aiMessagesPerMonth: null,
+    aiInsightsPerMonth: null,
+    maxReportMonths: 12,
     advancedReports: true,
     bankSync: true,
     exportFormats: ["csv", "pdf", "xlsx"],

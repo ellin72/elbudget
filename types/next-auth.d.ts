@@ -6,6 +6,7 @@ declare module "next-auth" {
       id: string;
       role: string;
       onboardingDone: boolean;
+      twoFactorEnabled?: boolean;
     } & DefaultSession["user"];
   }
 }

@@ -4,6 +4,9 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
+import { verifySync } from "otplib";
+import { consumeRateLimitByKey } from "@/lib/server/rate-limit";
+import { logAuditEvent } from "@/lib/server/audit";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -23,12 +26,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        twoFactorCode: { label: "2FA Code", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const email = String(credentials.email).toLowerCase();
+        const attemptKey = `auth-login:${email}`;
+        const rateLimit = consumeRateLimitByKey(attemptKey, {
+          max: 10,
+          windowMs: 60_000,
+        });
+        if (!rateLimit.allowed) {
+          return null;
+        }
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email },
         });
 
         if (!user || !user.passwordHash) return null;
@@ -38,7 +52,56 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           user.passwordHash
         );
 
-        if (!isValid) return null;
+        if (!isValid) {
+          await logAuditEvent({
+            userId: user.id,
+            action: "LOGIN_FAILED",
+            resource: "auth",
+            metadata: { reason: "invalid_password" },
+          });
+          return null;
+        }
+
+        if (user.twoFactorEnabled) {
+          const code = String(credentials.twoFactorCode ?? "").trim();
+          if (!user.twoFactorSecret || !code) {
+            await logAuditEvent({
+              userId: user.id,
+              action: "LOGIN_FAILED",
+              resource: "auth",
+              metadata: { reason: "missing_2fa_code" },
+            });
+            return null;
+          }
+
+          const verifyResult = verifySync({
+            token: code,
+            secret: user.twoFactorSecret,
+            strategy: "totp",
+          });
+          const valid2FA =
+            typeof verifyResult === "boolean" ? verifyResult : verifyResult.valid;
+
+          if (!valid2FA) {
+            await logAuditEvent({
+              userId: user.id,
+              action: "LOGIN_FAILED",
+              resource: "auth",
+              metadata: { reason: "invalid_2fa_code" },
+            });
+            return null;
+          }
+        }
+
+        await logAuditEvent({
+          userId: user.id,
+          action: "LOGIN_SUCCESS",
+          resource: "auth",
+          metadata: {
+            provider: "credentials",
+            twoFactorEnabled: user.twoFactorEnabled,
+          },
+        });
 
         return {
           id: user.id,
@@ -47,6 +110,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           image: user.image,
           role: user.role,
           onboardingDone: user.onboardingDone,
+          twoFactorEnabled: user.twoFactorEnabled,
         };
       },
     }),
@@ -57,10 +121,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.id = user.id;
         token.role = (user as any).role;
         token.onboardingDone = (user as any).onboardingDone;
+        token.twoFactorEnabled = (user as any).twoFactorEnabled;
       }
       if (trigger === "update" && session) {
         token.onboardingDone = session.onboardingDone;
         token.name = session.name;
+        token.twoFactorEnabled = (session as any).twoFactorEnabled;
       }
       return token;
     },
@@ -69,6 +135,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.id as string;
         (session.user as any).role = token.role;
         (session.user as any).onboardingDone = token.onboardingDone;
+        (session.user as any).twoFactorEnabled = token.twoFactorEnabled;
       }
       return session;
     },

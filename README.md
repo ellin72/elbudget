@@ -34,7 +34,7 @@ See `docs/screenshots/CHECKLIST.md` for capture standards.
 
 - Framework: Next.js 15 (App Router), React 19, TypeScript
 - Styling/UI: Tailwind CSS, Radix UI, Framer Motion
-- Data: Prisma ORM with SQLite
+- Data: Prisma ORM (SQLite for local development, PostgreSQL-ready schema for production)
 - Auth: NextAuth
 - State/Data fetching: Zustand, TanStack React Query
 - Validation: Zod + React Hook Form
@@ -79,7 +79,7 @@ npm run db:generate
 npm run db:push
 ```
 
-Optional (if/when `prisma/seed.ts` exists):
+Optional seed data:
 
 ```bash
 npm run db:seed
@@ -105,6 +105,7 @@ Defined in `.env.example`:
 ### Database
 
 - `DATABASE_URL` (default local SQLite: `file:./dev.db`)
+- For production, use PostgreSQL values from `.env.production.example`
 
 ### OAuth
 
@@ -146,10 +147,11 @@ Defined in `.env.example`:
 
 ## Database Setup
 
-Prisma uses SQLite in this repository.
+Prisma uses SQLite for local development in this repository.
 
 - Schema file: `prisma/schema.prisma`
 - Datasource: SQLite via `DATABASE_URL`
+- Production schema file: `prisma/schema.postgresql.prisma`
 
 Common commands:
 
@@ -158,7 +160,16 @@ npm run db:generate   # Generate Prisma client
 npm run db:push       # Push schema to database
 npm run db:migrate    # Create/apply dev migration
 npm run db:studio     # Open Prisma Studio
+npm run db:generate:pg # Generate Prisma client from PostgreSQL schema
+npm run db:migrate:pg  # Create PostgreSQL migrations in development
+npm run db:deploy:pg   # Apply PostgreSQL migrations in deployment
 ```
+
+Production migration recommendation:
+
+1. Keep local development on SQLite for fast setup.
+2. Run and validate PostgreSQL migrations using `prisma/schema.postgresql.prisma`.
+3. Deploy with PostgreSQL `DATABASE_URL` from `.env.production.example`.
 
 ## Testing
 
@@ -188,9 +199,148 @@ This project includes `vercel.json` cron configuration:
 For production deployment:
 
 - Set all required environment variables in your hosting platform.
+- Do not commit local artifacts like `prisma/dev.db` or install logs.
 - Ensure `CRON_SECRET` is configured and matches the cron caller authorization.
 - Configure `NEXTAUTH_URL` and `NEXTAUTH_SECRET` for production domain/security.
 - Run `npm run build` to verify production build before deploy.
+
+## API Architecture
+
+The API now includes shared server-side helpers and service modules:
+
+- Response and error envelope helpers in `lib/server/api.ts`
+- Auth and ownership helpers in `lib/server/auth.ts`
+- Zod request validation helper in `lib/server/validation.ts`
+- Route-level rate limiting helper in `lib/server/rate-limit.ts`
+- Domain service modules in `lib/services/*`
+
+Current route adoption examples:
+
+- `app/api/auth/register/route.ts` uses standardized validation, response envelopes, and rate limiting
+- `app/api/ai/chat/route.ts` uses auth enforcement, rate limiting, and AI domain service orchestration
+
+## Security Hardening
+
+Security controls implemented for finance-grade trust:
+
+- Credential auth with bcrypt and OAuth support
+- Brute-force protection via route and key-based rate limiting
+- Secure password reset flow:
+  - hashed reset tokens at rest
+  - one-time-use token invalidation
+  - expiry enforcement
+- Two-factor authentication (TOTP) flow:
+  - setup QR + manual secret key
+  - verify enable
+  - secure disable with code challenge
+- Security audit trail for key auth and AI events
+- Security activity endpoint for session/device visibility patterns
+
+Key security endpoints:
+
+- `app/api/auth/forgot-password/route.ts`
+- `app/api/auth/reset-password/route.ts`
+- `app/api/auth/2fa/setup/route.ts`
+- `app/api/auth/2fa/verify/route.ts`
+- `app/api/auth/2fa/disable/route.ts`
+- `app/api/user/sessions/route.ts`
+
+## AI Safety And Cost Controls
+
+The AI stack includes guardrails for safer and more predictable behavior:
+
+- Plan-based AI quotas (free vs premium)
+- Request rate limiting on AI routes
+- Prompt boundaries that avoid overconfident professional advice
+- Required educational disclaimer in AI responses
+- Deterministic fallback summary when AI is unavailable
+- Confidence signal in assistant responses
+- Prompt/response metadata logging for debugging and cost tracking:
+  - model
+  - token usage
+  - latency
+  - prompt/response sizes
+- Conversation context window limiting to reduce token costs
+
+AI endpoints and modules:
+
+- `app/api/ai/chat/route.ts`
+- `app/api/ai/insights/route.ts`
+- `lib/ai.ts`
+- `lib/services/ai.service.ts`
+
+## Premium Plan Consistency
+
+Current capabilities are defined centrally in `types/index.ts` and enforced in API routes.
+
+Free plan limits:
+
+- Budgets: 3
+- Goals: 3
+- Active debts: 5
+- AI assistant responses: 30 per month
+- AI insight generations: 3 per month
+- Report history depth: up to 6 months
+- Export formats: CSV
+
+Premium plan capabilities:
+
+- Unlimited budgets/goals/debts
+- Unlimited AI usage
+- Report history up to 12 months
+- Export formats: CSV, PDF, XLSX
+
+Route-level gating examples:
+
+- Budget creation limit: `app/api/budgets/route.ts`
+- Goal creation limit: `app/api/goals/route.ts`
+- Debt creation limit: `app/api/debts/route.ts`
+- AI quotas: `app/api/ai/chat/route.ts`, `app/api/ai/insights/route.ts`
+- Report depth gating: `app/api/reports/route.ts`
+
+Billing lifecycle and reconciliation:
+
+- Stripe webhook handler updates subscription lifecycle states:
+  - trialing
+  - active
+  - cancellation
+  - payment failure (past due)
+  - payment recovery
+- Webhook endpoint: `app/api/billing/webhook/route.ts`
+
+## Testing Strategy
+
+Test suites are organized by layer:
+
+- Unit tests: financial calculations, formatting, validation schemas, debt payoff math
+- Integration tests: auth registration route behavior and subscription capability consistency
+- E2E suite scaffold: core user journey routes (registration/login/onboarding/dashboard feature pages)
+
+Commands:
+
+```bash
+npm test
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+npm run test:e2e:full
+```
+
+Note: full E2E runs are gated behind `RUN_E2E=true` for stability in local/CI contexts.
+
+## CI/CD
+
+GitHub Actions CI runs on every push and pull request with:
+
+1. `npm ci`
+2. `npm run type-check`
+3. `npm run lint`
+4. `npm test`
+5. `npm run build`
+
+Workflow file:
+
+- `.github/workflows/ci.yml`
 
 ## Roadmap
 

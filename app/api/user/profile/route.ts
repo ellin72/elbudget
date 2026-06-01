@@ -92,6 +92,7 @@ export async function GET() {
       salaryDate: true,
       budgetStyle: true,
       onboardingDone: true,
+      twoFactorEnabled: true,
       createdAt: true,
       subscription: {
         select: { plan: true, status: true, currentPeriodEnd: true },

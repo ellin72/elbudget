@@ -5,6 +5,12 @@ import { z } from "zod";
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  twoFactorCode: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "2FA code must be 6 digits")
+    .optional()
+    .or(z.literal("")),
 });
 
 const registerBaseSchema = z.object({
@@ -181,6 +187,10 @@ export const categorySchema = z.object({
 export const aiChatSchema = z.object({
   message: z.string().min(1).max(2000),
   conversationId: z.string().cuid().optional(),
+});
+
+export const twoFactorCodeSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, "2FA code must be 6 digits"),
 });
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────

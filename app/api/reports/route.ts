@@ -8,6 +8,7 @@ import {
   createMonthBuckets,
   type FinancialTransaction,
 } from "@/lib/financial";
+import { getPlanFeaturesForUser } from "@/lib/subscription";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -18,8 +19,20 @@ export async function GET(req: NextRequest) {
   await syncDueRecurringIncomeForUser(session.user.id);
 
   const { searchParams } = new URL(req.url);
-  const monthsBack = Math.min(12, Math.max(1, parseInt(searchParams.get("months") ?? "6", 10) || 6));
+  const requestedMonths = Math.min(12, Math.max(1, parseInt(searchParams.get("months") ?? "6", 10) || 6));
   const userId = session.user.id;
+  const { plan, features } = await getPlanFeaturesForUser(userId);
+  const maxReportMonths = features.maxReportMonths ?? 12;
+  const monthsBack = Math.min(requestedMonths, maxReportMonths);
+
+  if (requestedMonths > monthsBack) {
+    return NextResponse.json(
+      {
+        error: `Your ${plan} plan supports up to ${maxReportMonths} months of report history.`,
+      },
+      { status: 403 }
+    );
+  }
 
   const now = new Date();
   const [user, latestTx] = await Promise.all([

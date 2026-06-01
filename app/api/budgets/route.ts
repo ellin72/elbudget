@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { budgetSchema } from "@/lib/validations";
+import { enforceCreationLimit } from "@/lib/subscription";
 import { startOfMonth, endOfMonth, addWeeks, addMonths, addQuarters, addYears, subDays } from "date-fns";
 
 function round2(value: number) {
@@ -191,6 +192,16 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const quota = await enforceCreationLimit(session.user.id, "budgets");
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: `Your ${quota.plan} plan allows up to ${quota.limit} budgets. Upgrade to create more.`,
+      },
+      { status: 403 }
+    );
+  }
 
   const body = await request.json();
   const parsed = budgetSchema.safeParse(body);
