@@ -2,7 +2,22 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { budgetSchema } from "@/lib/validations";
-import { startOfMonth, endOfMonth } from "date-fns";
+import { startOfMonth, endOfMonth, addWeeks, addMonths, addQuarters, addYears, subDays } from "date-fns";
+
+function getBudgetEndDate(startDate: Date, period: "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY") {
+  switch (period) {
+    case "WEEKLY":
+      return subDays(addWeeks(startDate, 1), 1);
+    case "MONTHLY":
+      return subDays(addMonths(startDate, 1), 1);
+    case "QUARTERLY":
+      return subDays(addQuarters(startDate, 1), 1);
+    case "YEARLY":
+      return subDays(addYears(startDate, 1), 1);
+    default:
+      return endOfMonth(startDate);
+  }
+}
 
 export async function GET() {
   const session = await auth();
@@ -10,7 +25,14 @@ export async function GET() {
 
   const now = new Date();
   const budgets = await prisma.budget.findMany({
-    where: { userId: session.user.id, startDate: { lte: endOfMonth(now) }, endDate: { gte: startOfMonth(now) } },
+    where: {
+      userId: session.user.id,
+      startDate: { lte: endOfMonth(now) },
+      OR: [
+        { endDate: null },
+        { endDate: { gte: startOfMonth(now) } },
+      ],
+    },
     include: {
       items: { include: { category: true } },
     },
@@ -35,14 +57,16 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
 
   const { items, ...budgetData } = parsed.data;
+  const startDate = new Date(budgetData.startDate);
+  const computedEndDate = getBudgetEndDate(startDate, budgetData.period);
   const totalAmount = items ? items.reduce((sum, item) => sum + item.allocatedAmount, 0) : 0;
   const budget = await prisma.budget.create({
     data: {
       ...budgetData,
       totalAmount,
       userId: session.user.id,
-      startDate: new Date(budgetData.startDate),
-      endDate: (budgetData as any).endDate ? new Date((budgetData as any).endDate) : null,
+      startDate,
+      endDate: computedEndDate,
       items: items ? { create: items } : undefined,
     },
     include: { items: { include: { category: true } } },

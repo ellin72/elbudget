@@ -63,8 +63,7 @@ export default function Sidebar() {
         transition={{ duration: 0.2, ease: "easeInOut" }}
         className={cn(
           "fixed left-0 top-0 bottom-0 z-50 flex flex-col border-r border-border bg-card",
-          "hidden lg:flex",
-          sidebarOpen && "flex lg:hidden"
+          "hidden lg:flex"
         )}
       >
         {/* Logo */}

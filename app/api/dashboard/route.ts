@@ -12,8 +12,14 @@ export async function GET() {
   const userId = session.user.id;
 
   const now = new Date();
-  const startCurrent = startOfMonth(now);
-  const endCurrent = endOfMonth(now);
+  const latestTx = await prisma.transaction.findFirst({
+    where: { userId },
+    select: { date: true },
+    orderBy: { date: "desc" },
+  });
+  const anchorDate = latestTx?.date ?? now;
+  const startCurrent = startOfMonth(anchorDate);
+  const endCurrent = endOfMonth(anchorDate);
 
   // Run all queries in parallel
   const [
@@ -57,7 +63,7 @@ export async function GET() {
     // Last 6 months trends
     Promise.all(
       Array.from({ length: 6 }, (_, i) => {
-        const d = subMonths(now, 5 - i);
+        const d = subMonths(anchorDate, 5 - i);
         const start = startOfMonth(d);
         const end = endOfMonth(d);
         return prisma.transaction.aggregate({
@@ -71,11 +77,11 @@ export async function GET() {
         })).then(async (m) => {
           const [income, expenses] = await Promise.all([
             prisma.transaction.aggregate({
-              where: { userId, date: { gte: startOfMonth(subMonths(now, 5 - i)), lte: endOfMonth(subMonths(now, 5 - i)) }, type: "INCOME" },
+              where: { userId, date: { gte: startOfMonth(subMonths(anchorDate, 5 - i)), lte: endOfMonth(subMonths(anchorDate, 5 - i)) }, type: "INCOME" },
               _sum: { amount: true },
             }),
             prisma.transaction.aggregate({
-              where: { userId, date: { gte: startOfMonth(subMonths(now, 5 - i)), lte: endOfMonth(subMonths(now, 5 - i)) }, type: "EXPENSE" },
+              where: { userId, date: { gte: startOfMonth(subMonths(anchorDate, 5 - i)), lte: endOfMonth(subMonths(anchorDate, 5 - i)) }, type: "EXPENSE" },
               _sum: { amount: true },
             }),
           ]);

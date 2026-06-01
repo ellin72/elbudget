@@ -116,7 +116,9 @@ export default function BudgetsPage() {
             <div key={budget.id} className="bg-card rounded-2xl border border-border p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">{budget.name}</h3>
-                <span className="text-xs text-muted-foreground">{format(new Date(budget.startDate), "MMM d")} – {format(new Date(budget.endDate), "MMM d, yyyy")}</span>
+                <span className="text-xs text-muted-foreground">
+                  {format(new Date(budget.startDate), "MMM d")} – {budget.endDate ? format(new Date(budget.endDate), "MMM d, yyyy") : "Ongoing"}
+                </span>
               </div>
               <div className="space-y-3">
                 {(budget.items ?? []).map((item: any) => {
