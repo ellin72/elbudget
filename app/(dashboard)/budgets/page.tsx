@@ -32,6 +32,7 @@ export default function BudgetsPage() {
   const { data: catData } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, enabled: showForm });
   const budgets = data?.data ?? [];
   const categories = catData?.data ?? [];
+  const recurringMonthlyTotal = data?.recurringMonthlyTotal ?? 0;
 
   const totalAllocated = budgets.flatMap((b: any) => b.items ?? []).reduce((s: number, i: any) => s + i.allocatedAmount, 0);
   const totalSpent = budgets.flatMap((b: any) => b.items ?? []).reduce((s: number, i: any) => s + i.spentAmount, 0);
@@ -69,7 +70,9 @@ export default function BudgetsPage() {
       startDate: format(new Date(budget.startDate), "yyyy-MM-dd"),
       style: budget.style,
       items: (budget.items ?? []).length > 0
-        ? budget.items.map((item: any) => ({
+        ? budget.items
+          .filter((item: any) => !item.isRecurring)
+          .map((item: any) => ({
             name: item.name,
             categoryId: item.categoryId ?? null,
             allocatedAmount: Number(item.allocatedAmount),
@@ -189,16 +192,34 @@ export default function BudgetsPage() {
                 {(budget.items ?? []).map((item: any) => {
                   const pct = item.allocatedAmount > 0 ? (item.spentAmount / item.allocatedAmount) * 100 : 0;
                   const over = pct > 100;
+                  const itemLabel = item.isRecurring
+                    ? item.name
+                    : item.category?.name ?? item.name ?? "Uncategorized";
                   return (
                     <div key={item.id} className="space-y-1">
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{item.category?.name ?? "Uncategorized"}</span>
+                        <span className="text-muted-foreground inline-flex items-center gap-1.5">
+                          {itemLabel}
+                          {item.isRecurring && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-primary/20 text-primary">
+                              Recurring
+                            </span>
+                          )}
+                        </span>
                         <span className={over ? "text-destructive font-medium" : ""}>
                           {formatCurrency(item.spentAmount, currency as any)} / {formatCurrency(item.allocatedAmount, currency as any)}
                         </span>
                       </div>
                       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${over ? "bg-destructive" : "bg-primary"}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                        <progress
+                          value={Math.min(pct, 100)}
+                          max={100}
+                          className={`w-full h-1.5 [appearance:none] [&::-webkit-progress-bar]:bg-muted ${
+                            over
+                              ? "[&::-webkit-progress-value]:bg-destructive [&::-moz-progress-bar]:bg-destructive"
+                              : "[&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
+                          }`}
+                        />
                       </div>
                     </div>
                   );
@@ -304,6 +325,12 @@ export default function BudgetsPage() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {recurringMonthlyTotal > 0 && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
+          Fixed recurring services are automatically included in your monthly budget: {formatCurrency(recurringMonthlyTotal, currency as any)}
         </div>
       )}
     </div>

@@ -102,12 +102,14 @@ export async function GET() {
   ]);
 
   // Calculate stats
-  const monthlyIncome = currentMonthTxs
+  const declaredMonthlyIncome = user?.monthlyIncome?.toNumber?.() ?? 0;
+  const monthlyTransactionIncome = currentMonthTxs
     .filter((t) => t.type === "INCOME")
     .reduce((sum, t) => sum + t.amount.toNumber(), 0);
   const monthlyExpenses = currentMonthTxs
     .filter((t) => t.type === "EXPENSE")
     .reduce((sum, t) => sum + t.amount.toNumber(), 0);
+  const monthlyIncome = declaredMonthlyIncome > 0 ? declaredMonthlyIncome : monthlyTransactionIncome;
   const monthlySavings = monthlyIncome - monthlyExpenses;
   const savingsRate = monthlyIncome > 0 ? (monthlySavings / monthlyIncome) * 100 : 0;
   const totalDebt = activeDebts.reduce((sum, d) => sum + d.currentBalance.toNumber(), 0);

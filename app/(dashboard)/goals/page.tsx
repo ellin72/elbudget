@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { goalSchema, type GoalInput } from "@/lib/validations";
 import { formatCurrency, getProgressColor, calculatePercentage } from "@/lib/utils";
 import { useUIStore } from "@/store/useUIStore";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, endOfMonth } from "date-fns";
 
 async function fetchGoals() {
   const res = await fetch("/api/goals");
@@ -49,7 +49,7 @@ function GoalCard({ goal, currency }: { goal: any; currency: string }) {
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-semibold">{goal.name}</h3>
-          {goal.description && <p className="text-xs text-muted-foreground mt-0.5">{goal.description}</p>}
+          <p className="text-xs text-muted-foreground mt-0.5">Monthly savings challenge</p>
         </div>
         <span className={`text-xs px-2 py-1 rounded-full font-medium ${pct >= 100 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}>
           {pct.toFixed(0)}%
@@ -70,7 +70,7 @@ function GoalCard({ goal, currency }: { goal: any; currency: string }) {
       {daysLeft !== null && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Calendar className="w-3.5 h-3.5" />
-          {daysLeft > 0 ? `${daysLeft} days remaining` : "Deadline passed"}
+          {daysLeft > 0 ? `${daysLeft} days remaining to win this challenge` : "Challenge deadline passed"}
         </div>
       )}
 
@@ -97,7 +97,7 @@ function GoalCard({ goal, currency }: { goal: any; currency: string }) {
           onClick={() => setContributing(true)}
           className="w-full py-2 rounded-xl border border-dashed border-primary/40 text-primary text-sm font-medium hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
         >
-          <Plus className="w-3.5 h-3.5" /> Add Contribution
+          <Plus className="w-3.5 h-3.5" /> Add Progress
         </button>
       )}
     </div>
@@ -106,7 +106,12 @@ function GoalCard({ goal, currency }: { goal: any; currency: string }) {
 
 function GoalForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
-  const { register, handleSubmit, formState: { errors } } = useForm<GoalInput>({ resolver: zodResolver(goalSchema) });
+  const { register, handleSubmit, formState: { errors } } = useForm<GoalInput>({
+    resolver: zodResolver(goalSchema),
+    defaultValues: {
+      targetDate: format(endOfMonth(new Date()), "yyyy-MM-dd"),
+    },
+  });
   const mutation = useMutation({
     mutationFn: async (data: GoalInput) => {
       const res = await fetch("/api/goals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
@@ -120,12 +125,13 @@ function GoalForm({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-card rounded-3xl border border-border p-6 w-full max-w-md z-10 space-y-4">
-        <h2 className="text-lg font-semibold">New Goal</h2>
+        <h2 className="text-lg font-semibold">New Savings Challenge</h2>
+        <p className="text-sm text-muted-foreground">Set a saving target and aim to complete it by month end.</p>
         <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-3">
           {[
-            { name: "name", label: "Goal Name", placeholder: "e.g. Emergency Fund" },
-            { name: "targetAmount", label: "Target Amount", placeholder: "0.00", type: "number" },
-            { name: "targetDate", label: "Target Date", type: "date" },
+            { name: "name", label: "Challenge Name", placeholder: "e.g. Save N$5,000 by month end" },
+            { name: "targetAmount", label: "Amount to Save", placeholder: "0.00", type: "number" },
+            { name: "targetDate", label: "Deadline", type: "date" },
           ].map(({ name, label, placeholder, type }) => (
             <div key={name} className="space-y-1">
               <label className="text-sm font-medium">{label}</label>
@@ -136,7 +142,7 @@ function GoalForm({ onClose }: { onClose: () => void }) {
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-border hover:bg-accent text-sm">Cancel</button>
             <button type="submit" disabled={mutation.isPending} className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 flex items-center justify-center gap-2">
-              {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Create Goal
+              {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Start Challenge
             </button>
           </div>
         </form>
@@ -154,11 +160,11 @@ export default function GoalsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Savings Goals</h2>
-          <p className="text-sm text-muted-foreground">Track progress toward your financial milestones</p>
+          <h2 className="text-xl font-semibold">Savings Challenges</h2>
+          <p className="text-sm text-muted-foreground">Set monthly targets and track your progress to the finish line</p>
         </div>
         <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 shadow-glow">
-          <Plus className="w-4 h-4" /> New Goal
+          <Plus className="w-4 h-4" /> New Challenge
         </button>
       </div>
 
@@ -167,8 +173,8 @@ export default function GoalsPage() {
       ) : data?.data?.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Target className="w-10 h-10 text-muted-foreground" />
-          <p className="text-muted-foreground">No goals yet. Create your first one!</p>
-          <button onClick={() => setShowForm(true)} className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90">Create Goal</button>
+          <p className="text-muted-foreground">No challenges yet. Create your first monthly savings challenge!</p>
+          <button onClick={() => setShowForm(true)} className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90">Create Challenge</button>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

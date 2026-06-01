@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   const where: any = { userId: session.user.id };
   if (filters.success) {
-    if (filters.data.type) where.type = filters.data.type;
+    if (filters.data.type && filters.data.type !== "ALL") where.type = filters.data.type;
     if (filters.data.categoryId) where.categoryId = filters.data.categoryId;
     if (filters.data.search) {
       where.description = { contains: filters.data.search };

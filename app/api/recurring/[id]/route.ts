@@ -5,7 +5,6 @@ import { z } from "zod";
 
 const updateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  amount: z.number().positive().optional(),
   isActive: z.boolean().optional(),
   nextDueDate: z.string().optional(),
   notes: z.string().optional().nullable(),
@@ -19,6 +18,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await req.json();
+
+  if (Object.prototype.hasOwnProperty.call(body, "amount")) {
+    return NextResponse.json(
+      { error: "Recurring amount is fixed after creation. Stop and create a new item to change amount." },
+      { status: 400 }
+    );
+  }
+
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

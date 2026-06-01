@@ -64,6 +64,11 @@ export default function StatsCards({ stats, currency = "NAD" }: StatsCardsProps)
             <p className="text-2xl font-bold tabular-nums">
               {formatCurrency(value, currency as any)}
             </p>
+            {key === "monthlyIncome" && value <= 0 && (
+              <p className="text-xs text-amber-600 mt-1.5">
+                Set your monthly income in Settings to see accurate totals.
+              </p>
+            )}
             {change !== null && (
               <p className={cn("text-xs font-medium mt-1.5 flex items-center gap-1", isPositive ? "text-green-500" : "text-red-500")}>
                 {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}

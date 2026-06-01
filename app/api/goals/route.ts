@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { goalSchema } from "@/lib/validations";
+import { endOfMonth } from "date-fns";
 
 export async function GET() {
   const session = await auth();
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     data: {
       ...parsed.data,
       userId: session.user.id,
-      targetDate: parsed.data.targetDate ? new Date(parsed.data.targetDate) : null,
+      targetDate: parsed.data.targetDate ? new Date(parsed.data.targetDate) : endOfMonth(new Date()),
     },
   });
 

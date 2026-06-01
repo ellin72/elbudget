@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, addDays, addWeeks, addMonths, addYears } from "date-fns";
+import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   RepeatIcon,
   PlusIcon,
-  PencilIcon,
   TrashIcon,
   CheckCircleIcon,
   XCircleIcon,
@@ -18,12 +17,10 @@ interface RecurringItem {
   id: string;
   name: string;
   type: "INCOME" | "EXPENSE";
-  amount: string;
+  amount: number;
   frequency: string;
   isActive: boolean;
-  nextDue: string;
-  startDate: string;
-  endDate: string | null;
+  nextDueDate: string;
   category: { name: string; color: string; icon: string } | null;
 }
 
@@ -55,50 +52,82 @@ export default function RecurringPage() {
     type: "EXPENSE" as "INCOME" | "EXPENSE",
     amount: "",
     frequency: "MONTHLY",
-    startDate: format(new Date(), "yyyy-MM-dd"),
-    description: "",
+    nextDueDate: format(new Date(), "yyyy-MM-dd"),
+    notes: "",
   });
 
   const { data: items = [], isLoading } = useQuery<RecurringItem[]>({
     queryKey: ["recurring"],
-    queryFn: () => fetch("/api/recurring").then((r) => r.json()),
+    queryFn: async () => {
+      const res = await fetch("/api/recurring");
+      if (!res.ok) throw new Error("Failed to load recurring items");
+      return res.json();
+    },
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof formData) =>
-      fetch("/api/recurring", {
+    mutationFn: async (data: typeof formData) => {
+      const res = await fetch("/api/recurring", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...data, amount: parseFloat(data.amount) }),
-      }).then((r) => r.json()),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to create recurring item");
+      }
+      return res.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
       setShowForm(false);
-      setFormData({ name: "", type: "EXPENSE", amount: "", frequency: "MONTHLY", startDate: format(new Date(), "yyyy-MM-dd"), description: "" });
+      setFormData({
+        name: "",
+        type: "EXPENSE",
+        amount: "",
+        frequency: "MONTHLY",
+        nextDueDate: format(new Date(), "yyyy-MM-dd"),
+        notes: "",
+      });
       toast.success("Recurring item created");
     },
-    onError: () => toast.error("Failed to create recurring item"),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const toggleMutation = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      fetch(`/api/recurring/${id}`, {
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await fetch(`/api/recurring/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive }),
-      }).then((r) => r.json()),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to update recurring item");
+      }
+      return res.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
       toast.success("Updated");
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => fetch(`/api/recurring/${id}`, { method: "DELETE" }).then((r) => r.json()),
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/recurring/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to delete recurring item");
+      }
+      return res.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
       toast.success("Deleted");
     },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const activeItems = items.filter((i) => i.isActive);
@@ -106,7 +135,7 @@ export default function RecurringPage() {
   const monthlyTotal = items
     .filter((i) => i.isActive)
     .reduce((sum, i) => {
-      const amount = parseFloat(i.amount);
+      const amount = Number(i.amount);
       const multiplier: Record<string, number> = {
         DAILY: 30, WEEKLY: 4.33, BIWEEKLY: 2.17, MONTHLY: 1, QUARTERLY: 1/3, YEARLY: 1/12,
       };
@@ -132,6 +161,9 @@ export default function RecurringPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Recurring Items</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Automate your regular income and expenses
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            Amount is fixed after creation. Stop the item and create a new one if amount changes.
           </p>
         </div>
         <button
@@ -209,8 +241,10 @@ export default function RecurringPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frequency</label>
+              <label htmlFor="recurring-frequency" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frequency</label>
               <select
+                id="recurring-frequency"
+                title="Recurring frequency"
                 value={formData.frequency}
                 onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -221,11 +255,13 @@ export default function RecurringPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+              <label htmlFor="recurring-next-due" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
               <input
+                id="recurring-next-due"
+                title="Recurring start date"
                 type="date"
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                value={formData.nextDueDate}
+                onChange={(e) => setFormData({ ...formData, nextDueDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
             </div>
@@ -307,7 +343,7 @@ function RecurringItemCard({
   onToggle: (id: string, isActive: boolean) => void;
   onDelete: (id: string) => void;
 }) {
-  const dueLabel = getNextDueLabel(item.nextDue);
+  const dueLabel = getNextDueLabel(item.nextDueDate);
   const isOverdue = dueLabel === "Overdue";
 
   return (
@@ -324,10 +360,7 @@ function RecurringItemCard({
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-900 dark:text-white truncate">{item.name}</span>
           {item.category && (
-            <span
-              className="text-xs px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: item.category.color + "20", color: item.category.color }}
-            >
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
               {item.category.name}
             </span>
           )}
@@ -344,7 +377,7 @@ function RecurringItemCard({
         item.type === "INCOME" ? "text-green-600" : "text-red-600"
       }`}>
         <span className="font-semibold">
-          {item.type === "INCOME" ? "+" : "-"}{formatCurrency(parseFloat(item.amount))}
+          {item.type === "INCOME" ? "+" : "-"}{formatCurrency(Number(item.amount))}
         </span>
       </div>
 

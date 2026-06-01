@@ -15,13 +15,13 @@ export default function SavingsProgress({ goals, currency = "NAD" }: Props) {
     return (
       <div className="bg-card rounded-2xl border border-border p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold">Savings Goals</h3>
+          <h3 className="font-semibold">Savings Challenges</h3>
           <Link href="/goals" className="text-xs text-primary hover:underline flex items-center gap-1">
-            Create goal <ArrowRight className="w-3 h-3" />
+            Create challenge <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
         <div className="py-8 text-center text-muted-foreground text-sm">
-          No goals set yet. Create your first savings goal!
+          No challenges set yet. Create your first monthly savings challenge!
         </div>
       </div>
     );
@@ -30,7 +30,7 @@ export default function SavingsProgress({ goals, currency = "NAD" }: Props) {
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">Savings Goals</h3>
+        <h3 className="font-semibold">Savings Challenges</h3>
         <Link href="/goals" className="text-xs text-primary hover:underline flex items-center gap-1">
           View all <ArrowRight className="w-3 h-3" />
         </Link>

@@ -41,7 +41,7 @@ export default function SettingsPage() {
     },
   });
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<UserProfileInput>({
+  const { register, handleSubmit, reset, setFocus, formState: { errors } } = useForm<UserProfileInput>({
     resolver: zodResolver(userProfileSchema),
     defaultValues: {
       name: session?.user?.name ?? "",
@@ -59,6 +59,13 @@ export default function SettingsPage() {
       setCurrency(profileData.currency);
     }
   }, [profileData, reset, setCurrency]);
+
+  useEffect(() => {
+    if (tab !== "profile") return;
+    if (!profileData) return;
+    if ((profileData.monthlyIncome ?? 0) > 0) return;
+    setTimeout(() => setFocus("monthlyIncome"), 0);
+  }, [tab, profileData, setFocus]);
 
   const mutation = useMutation({
     mutationFn: async (data: UserProfileInput) => {
@@ -117,6 +124,11 @@ export default function SettingsPage() {
       {tab === "profile" && (
         <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
           <h3 className="font-semibold">Personal Information</h3>
+          {(profileData?.monthlyIncome ?? 0) <= 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+              Your monthly income is not set yet. Add it below so the dashboard can show accurate income and savings numbers.
+            </div>
+          )}
           <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
             {[
               { name: "name", label: "Full Name", placeholder: "Your name" },
