@@ -217,7 +217,7 @@ export default function RecurringPage() {
             Automate your regular income and expenses
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-            Amount is fixed after creation. Stop the item and create a new one if amount changes.
+            Amount is fixed after creation. Income items post automatically on their settlement date. Stop the item and create a new one if amount changes.
           </p>
         </div>
         <button
@@ -403,7 +403,10 @@ function RecurringItemCard({
 }) {
   const dueLabel = getNextDueLabel(item.nextDueDate);
   const isOverdue = dueLabel === "Overdue";
-  const canMarkPaid = item.isActive && !hasPaidCurrentCycle(item.lastPaid, item.frequency);
+  const canMarkPaid =
+    item.type === "EXPENSE" &&
+    item.isActive &&
+    !hasPaidCurrentCycle(item.lastPaid, item.frequency);
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-xl p-4 border flex items-center gap-4 transition-all ${
@@ -432,6 +435,12 @@ function RecurringItemCard({
             <>
               <span>·</span>
               <span>Last paid {format(new Date(item.lastPaid), "MMM d, yyyy")}</span>
+            </>
+          )}
+          {item.type === "INCOME" && (
+            <>
+              <span>·</span>
+              <span>Auto-posts on due date</span>
             </>
           )}
         </div>

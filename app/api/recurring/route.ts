@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncDueRecurringIncomeForUser } from "@/lib/recurring";
 import { z } from "zod";
 
 const recurringSchema = z.object({
@@ -21,6 +22,8 @@ export async function GET() {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  await syncDueRecurringIncomeForUser(session.user.id);
 
   const items = await prisma.recurringItem.findMany({
     where: { userId: session.user.id },

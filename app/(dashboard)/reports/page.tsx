@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   BarChart,
   Bar,
@@ -89,6 +91,72 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
+  function exportPDF() {
+    if (!data) return;
+
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const generatedAt = new Date();
+    const periodLabel = PERIODS.find((period) => period.value === months)?.label ?? `${months} Months`;
+
+    doc.setFontSize(20);
+    doc.text("Elbudget Financial Report", 40, 48);
+    doc.setFontSize(10);
+    doc.setTextColor(90);
+    doc.text(`Period: ${periodLabel}`, 40, 68);
+    doc.text(`Generated: ${generatedAt.toLocaleString()}`, 40, 82);
+
+    doc.setFontSize(12);
+    doc.setTextColor(30);
+    doc.text("Summary", 40, 112);
+
+    autoTable(doc, {
+      startY: 122,
+      theme: "grid",
+      head: [["Metric", "Value"]],
+      body: [
+        ["Total Income", formatCurrency(data.totalIncome, currency as any)],
+        ["Total Expenses", formatCurrency(data.totalExpenses, currency as any)],
+        ["Net Savings", formatCurrency(data.totalSavings, currency as any)],
+        ["Average Savings Rate", `${data.avgMonthlySavingsRate.toFixed(1)}%`],
+        ["Transactions", String(data.transactionCount)],
+      ],
+      styles: { fontSize: 10, cellPadding: 6 },
+      headStyles: { fillColor: [37, 99, 235] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ? ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 0) + 24 : 260,
+      theme: "striped",
+      head: [["Month", "Income", "Expenses", "Savings", "Savings Rate", "Transactions"]],
+      body: data.monthlySummary.map((month) => [
+        month.month,
+        formatCurrency(month.income, currency as any),
+        formatCurrency(month.expenses, currency as any),
+        formatCurrency(month.savings, currency as any),
+        `${month.savingsRate.toFixed(1)}%`,
+        String(month.transactionCount),
+      ]),
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [16, 185, 129] },
+    });
+
+    autoTable(doc, {
+      startY: ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 0) + 24,
+      theme: "striped",
+      head: [["Category", "Amount", "% of Expenses", "Transactions"]],
+      body: data.spendingByCategory.slice(0, 10).map((category) => [
+        category.name,
+        formatCurrency(category.total, currency as any),
+        `${data.totalExpenses > 0 ? ((category.total / data.totalExpenses) * 100).toFixed(1) : "0.0"}%`,
+        String(category.count),
+      ]),
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [239, 68, 68] },
+    });
+
+    doc.save(`elbudget-report-${months}months.pdf`);
+  }
+
   if (isLoading) {
     return (
       <div className="p-8 space-y-6">
@@ -140,6 +208,13 @@ export default function ReportsPage() {
           >
             <DownloadIcon className="w-4 h-4" />
             Export CSV
+          </button>
+          <button
+            onClick={exportPDF}
+            className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm transition-colors"
+          >
+            <DownloadIcon className="w-4 h-4" />
+            Export PDF
           </button>
         </div>
       </div>

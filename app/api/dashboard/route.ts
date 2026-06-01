@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncDueRecurringIncomeForUser } from "@/lib/recurring";
 import { subMonths } from "date-fns";
 import {
   buildMonthlySummary,
@@ -17,6 +18,8 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = session.user.id;
+
+  await syncDueRecurringIncomeForUser(userId);
 
   const now = new Date();
   const latestTx = await prisma.transaction.findFirst({

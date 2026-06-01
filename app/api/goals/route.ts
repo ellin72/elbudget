@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncDueRecurringIncomeForUser } from "@/lib/recurring";
 import { goalSchema } from "@/lib/validations";
 import { endOfMonth, format, startOfMonth } from "date-fns";
 import {
@@ -11,6 +12,8 @@ import {
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await syncDueRecurringIncomeForUser(session.user.id);
 
   const now = new Date();
   const monthStart = startOfMonth(now);

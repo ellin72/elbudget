@@ -1,64 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { addByFrequency, hasPaidCurrentCycle } from "@/lib/recurring";
 import { z } from "zod";
-
-function hasPaidCurrentCycle(lastPaid: Date | null, referenceDate: Date, frequency: string) {
-  if (!lastPaid) return false;
-
-  switch (frequency) {
-    case "DAILY":
-      return lastPaid.toDateString() === referenceDate.toDateString();
-    case "WEEKLY": {
-      const diffMs = referenceDate.getTime() - lastPaid.getTime();
-      return diffMs >= 0 && diffMs < 7 * 24 * 60 * 60 * 1000;
-    }
-    case "BIWEEKLY": {
-      const diffMs = referenceDate.getTime() - lastPaid.getTime();
-      return diffMs >= 0 && diffMs < 14 * 24 * 60 * 60 * 1000;
-    }
-    case "MONTHLY":
-      return (
-        lastPaid.getFullYear() === referenceDate.getFullYear() &&
-        lastPaid.getMonth() === referenceDate.getMonth()
-      );
-    case "QUARTERLY":
-      return (
-        lastPaid.getFullYear() === referenceDate.getFullYear() &&
-        Math.floor(lastPaid.getMonth() / 3) === Math.floor(referenceDate.getMonth() / 3)
-      );
-    case "YEARLY":
-      return lastPaid.getFullYear() === referenceDate.getFullYear();
-    default:
-      return false;
-  }
-}
-
-function addByFrequency(date: Date, frequency: string) {
-  const d = new Date(date);
-  switch (frequency) {
-    case "DAILY":
-      d.setDate(d.getDate() + 1);
-      return d;
-    case "WEEKLY":
-      d.setDate(d.getDate() + 7);
-      return d;
-    case "BIWEEKLY":
-      d.setDate(d.getDate() + 14);
-      return d;
-    case "MONTHLY":
-      d.setMonth(d.getMonth() + 1);
-      return d;
-    case "QUARTERLY":
-      d.setMonth(d.getMonth() + 3);
-      return d;
-    case "YEARLY":
-      d.setFullYear(d.getFullYear() + 1);
-      return d;
-    default:
-      return d;
-  }
-}
 
 const updateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -100,6 +44,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!item.isActive) {
       return NextResponse.json(
         { error: "Only active recurring items can be marked as paid." },
+        { status: 400 }
+      );
+    }
+    if (item.type === "INCOME") {
+      return NextResponse.json(
+        { error: "Recurring income is auto-posted on its settlement date and does not need manual payment." },
         { status: 400 }
       );
     }

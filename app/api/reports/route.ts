@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncDueRecurringIncomeForUser } from "@/lib/recurring";
 import {
   buildMonthlySummary,
   buildSpendingByCategory,
@@ -13,6 +14,8 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  await syncDueRecurringIncomeForUser(session.user.id);
 
   const { searchParams } = new URL(req.url);
   const monthsBack = Math.min(12, Math.max(1, parseInt(searchParams.get("months") ?? "6", 10) || 6));
