@@ -2,8 +2,8 @@
 
 import { useSession } from "next-auth/react";
 import { useUIStore } from "@/store/useUIStore";
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, User, Bell, CreditCard, Shield } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -28,26 +28,52 @@ const NOTIFICATION_DEFAULTS = {
 export default function SettingsPage() {
   const { data: session } = useSession();
   const { currency, setCurrency } = useUIStore();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<"profile" | "notifications" | "subscription">("profile");
   const [notifications, setNotifications] = useState(NOTIFICATION_DEFAULTS);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<UserProfileInput>({
+  const { data: profileData } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/profile");
+      if (!res.ok) throw new Error("Failed to load profile");
+      return res.json();
+    },
+  });
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<UserProfileInput>({
     resolver: zodResolver(userProfileSchema),
     defaultValues: {
       name: session?.user?.name ?? "",
+      monthlyIncome: undefined,
     },
   });
+
+  useEffect(() => {
+    if (!profileData) return;
+    reset({
+      name: profileData.name ?? "",
+      monthlyIncome: profileData.monthlyIncome ?? undefined,
+    });
+    if (profileData.currency) {
+      setCurrency(profileData.currency);
+    }
+  }, [profileData, reset, setCurrency]);
 
   const mutation = useMutation({
     mutationFn: async (data: UserProfileInput) => {
       const res = await fetch("/api/user/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, currency }),
       });
       if (!res.ok) throw new Error("Failed");
     },
-    onSuccess: () => toast.success("Profile updated!"),
+    onSuccess: () => {
+      toast.success("Profile updated!");
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+    },
     onError: () => toast.error("Failed to update profile"),
   });
 
@@ -94,7 +120,6 @@ export default function SettingsPage() {
           <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
             {[
               { name: "name", label: "Full Name", placeholder: "Your name" },
-              { name: "email", label: "Email", placeholder: "you@example.com", type: "email" },
             ].map(({ name, label, placeholder, type }) => (
               <div key={name} className="space-y-1.5">
                 <label className="text-sm font-medium">{label}</label>
@@ -102,6 +127,19 @@ export default function SettingsPage() {
                   className="w-full px-4 py-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               </div>
             ))}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Monthly Income</label>
+              <input
+                {...register("monthlyIncome", { valueAsNumber: true })}
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 25000"
+                className="w-full px-4 py-3 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {errors.monthlyIncome && <p className="text-xs text-destructive">{errors.monthlyIncome.message}</p>}
+            </div>
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Currency</label>

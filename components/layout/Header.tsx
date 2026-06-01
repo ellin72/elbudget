@@ -5,6 +5,8 @@ import { useTheme } from "next-themes";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, LogOut, Menu, Moon, Plus, Search, Settings, Sun, User, X } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -39,12 +41,64 @@ export default function Header() {
   const router = useRouter();
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
-  const { setSidebarOpen, setTransactionModalOpen, notificationsOpen, setNotificationsOpen, unreadCount } = useUIStore();
+  const { setSidebarOpen, setTransactionModalOpen, notificationsOpen, setNotificationsOpen, unreadCount, setUnreadCount } = useUIStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: insightsData, refetch: refetchInsights } = useQuery({
+    queryKey: ["ai-insights", "header"],
+    queryFn: async () => {
+      const res = await fetch("/api/ai/insights");
+      if (!res.ok) throw new Error("Failed to load notifications");
+      return res.json();
+    },
+  });
+
+  const unreadInsights = (insightsData ?? []).filter((i: any) => !i.isRead);
+
+  const markReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch("/api/ai/insights", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) throw new Error("Failed to mark notification as read");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success("Notification marked as read");
+      refetchInsights();
+    },
+    onError: () => toast.error("Failed to update notification"),
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(
+        ids.map(async (id) => {
+          const res = await fetch("/api/ai/insights", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+          if (!res.ok) {
+            throw new Error("Failed to mark all notifications as read");
+          }
+          return res.json();
+        })
+      );
+    },
+    onSuccess: () => {
+      toast.success("All notifications marked as read");
+      refetchInsights();
+    },
+    onError: () => toast.error("Failed to mark all notifications"),
+  });
 
   const pageTitle = Object.entries(PAGE_TITLES).find(([key]) =>
     pathname === key || pathname.startsWith(key + "/")
@@ -56,10 +110,17 @@ export default function Header() {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
       }
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setNotificationsOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [setNotificationsOpen]);
+
+  useEffect(() => {
+    setUnreadCount(unreadInsights.length);
+  }, [setUnreadCount, unreadInsights.length]);
 
   useEffect(() => {
     if (searchOpen) {
@@ -128,17 +189,63 @@ export default function Header() {
         </button>
 
         {/* Notifications */}
-        <button
-          onClick={() => setNotificationsOpen(!notificationsOpen)}
-          className="relative w-9 h-9 rounded-xl flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground"
-        >
-          <Bell className="w-4 h-4" />
-          {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
+        <div className="relative" ref={notificationsRef}>
+          <button
+            onClick={() => setNotificationsOpen(!notificationsOpen)}
+            aria-label="Notifications"
+            className="relative w-9 h-9 rounded-xl flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {notificationsOpen && (
+            <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto rounded-2xl border border-border bg-card shadow-card z-50">
+              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                <p className="text-sm font-semibold">Notifications</p>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={() => markAllReadMutation.mutate(unreadInsights.map((i: any) => i.id))}
+                      disabled={markAllReadMutation.isPending}
+                      className="text-xs text-primary hover:underline disabled:opacity-50"
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                  <span className="text-xs text-muted-foreground">{unreadCount} unread</span>
+                </div>
+              </div>
+              <div className="p-2 space-y-1">
+                {(insightsData ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">No notifications yet</p>
+                ) : (
+                  (insightsData ?? []).slice(0, 8).map((insight: any) => (
+                    <button
+                      key={insight.id}
+                      onClick={() => {
+                        if (!insight.isRead) {
+                          markReadMutation.mutate(insight.id);
+                        }
+                      }}
+                      className={cn(
+                        "w-full text-left px-3 py-2.5 rounded-xl hover:bg-accent transition-colors",
+                        !insight.isRead && "bg-primary/5"
+                      )}
+                    >
+                      <p className="text-sm font-medium line-clamp-1">{insight.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{insight.content}</p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           )}
-        </button>
+        </div>
 
         {/* User menu */}
         <div className="relative" ref={userMenuRef}>

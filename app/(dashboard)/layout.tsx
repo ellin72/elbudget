@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import GlobalOverlays from "@/components/layout/GlobalOverlays";
 
 export default async function DashboardLayout({
   children,
@@ -26,6 +27,7 @@ export default async function DashboardLayout({
         <main className="flex-1 overflow-y-auto">
           <div className="page-container">{children}</div>
         </main>
+        <GlobalOverlays />
       </div>
     </div>
   );

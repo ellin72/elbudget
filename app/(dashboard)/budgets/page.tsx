@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, BarChart2, Loader2, TrendingUp, ArrowDownLeft, ArrowUpRight, Trash2 } from "lucide-react";
+import { Plus, BarChart2, Loader2, TrendingUp, ArrowDownLeft, ArrowUpRight, Trash2, Pencil } from "lucide-react";
 import { useUIStore } from "@/store/useUIStore";
 import { formatCurrency } from "@/lib/utils";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -26,6 +26,7 @@ async function fetchCategories() {
 export default function BudgetsPage() {
   const { currency } = useUIStore();
   const [showForm, setShowForm] = useState(false);
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["budgets"], queryFn: fetchBudgets });
   const { data: catData } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, enabled: showForm });
@@ -47,6 +48,36 @@ export default function BudgetsPage() {
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
+
+  const openCreateModal = () => {
+    setEditingBudgetId(null);
+    reset({
+      name: "",
+      period: "MONTHLY",
+      startDate: format(startOfMonth(new Date()), "yyyy-MM-dd"),
+      style: "CUSTOM",
+      items: [{ name: "", categoryId: null, allocatedAmount: 0 }],
+    });
+    setShowForm(true);
+  };
+
+  const openEditModal = (budget: any) => {
+    setEditingBudgetId(budget.id);
+    reset({
+      name: budget.name,
+      period: budget.period,
+      startDate: format(new Date(budget.startDate), "yyyy-MM-dd"),
+      style: budget.style,
+      items: (budget.items ?? []).length > 0
+        ? budget.items.map((item: any) => ({
+            name: item.name,
+            categoryId: item.categoryId ?? null,
+            allocatedAmount: Number(item.allocatedAmount),
+          }))
+        : [{ name: "", categoryId: null, allocatedAmount: 0 }],
+    });
+    setShowForm(true);
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data: BudgetInput) => {
@@ -70,6 +101,32 @@ export default function BudgetsPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async (data: BudgetInput) => {
+      if (!editingBudgetId) throw new Error("No budget selected");
+      const res = await fetch(`/api/budgets/${editingBudgetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed to update budget");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success("Budget updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      setShowForm(false);
+      setEditingBudgetId(null);
+      reset();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -77,7 +134,7 @@ export default function BudgetsPage() {
           <h2 className="text-xl font-semibold">Budgets</h2>
           <p className="text-sm text-muted-foreground">Plan and control your monthly spending</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 shadow-glow">
+        <button onClick={openCreateModal} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 shadow-glow">
           <Plus className="w-4 h-4" /> New Budget
         </button>
       </div>
@@ -108,17 +165,25 @@ export default function BudgetsPage() {
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <BarChart2 className="w-10 h-10 text-muted-foreground" />
           <p className="text-muted-foreground">No budgets yet. Create one to start controlling your spending.</p>
-          <button onClick={() => setShowForm(true)} className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90">Create Budget</button>
+          <button onClick={openCreateModal} className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90">Create Budget</button>
         </div>
       ) : (
         <div className="space-y-4">
           {budgets.map((budget: any) => (
             <div key={budget.id} className="bg-card rounded-2xl border border-border p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{budget.name}</h3>
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(budget.startDate), "MMM d")} – {budget.endDate ? format(new Date(budget.endDate), "MMM d, yyyy") : "Ongoing"}
-                </span>
+                <div>
+                  <h3 className="font-semibold">{budget.name}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {format(new Date(budget.startDate), "MMM d")} – {budget.endDate ? format(new Date(budget.endDate), "MMM d, yyyy") : "Ongoing"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => openEditModal(budget)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-accent"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
               </div>
               <div className="space-y-3">
                 {(budget.items ?? []).map((item: any) => {
@@ -146,10 +211,10 @@ export default function BudgetsPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => { setShowForm(false); reset(); }} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => { setShowForm(false); setEditingBudgetId(null); reset(); }} />
           <div className="relative bg-card rounded-3xl border border-border p-6 w-full max-w-lg z-10 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-4">New Budget</h2>
-            <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
+            <h2 className="text-lg font-semibold mb-4">{editingBudgetId ? "Edit Budget" : "New Budget"}</h2>
+            <form onSubmit={handleSubmit((d) => editingBudgetId ? updateMutation.mutate(d) : createMutation.mutate(d))} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Budget Name</label>
                 <input {...register("name")} placeholder="e.g. November Budget"
@@ -195,11 +260,24 @@ export default function BudgetsPage() {
                 </div>
                 {errors.items && <p className="text-xs text-destructive">Add at least one budget item</p>}
                 {fields.map((field, index) => (
-                  <div key={field.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
+                  <div key={field.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-start">
                     <div>
                       <input {...register(`items.${index}.name`)} placeholder="Item name"
                         className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                       {errors.items?.[index]?.name && <p className="text-xs text-destructive mt-0.5">{errors.items[index]?.name?.message}</p>}
+                    </div>
+                    <div>
+                      <select
+                        {...register(`items.${index}.categoryId`)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="">Select category</option>
+                        {categories.map((cat: any) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.icon} {cat.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <input {...register(`items.${index}.allocatedAmount`)} type="number" min="0" step="0.01" placeholder="Amount"
@@ -216,12 +294,12 @@ export default function BudgetsPage() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => { setShowForm(false); reset(); }}
+                <button type="button" onClick={() => { setShowForm(false); setEditingBudgetId(null); reset(); }}
                   className="flex-1 py-3 rounded-xl border border-border hover:bg-accent text-sm">Cancel</button>
-                <button type="submit" disabled={createMutation.isPending}
+                <button type="submit" disabled={isSubmitting}
                   className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
-                  {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Create
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingBudgetId ? "Save Changes" : "Create"}
                 </button>
               </div>
             </form>
